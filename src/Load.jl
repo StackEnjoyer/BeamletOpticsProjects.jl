@@ -1,12 +1,60 @@
 #=
-Loading a project (being implemented)
+Loading a project
 =#
 
 """
     load_project(path) -> Project
 
-Loads the project in the folder `path`: includes `src/<name>.jl` and runs `system.jl`.
+Loads the project in the folder `path`: includes the own code `src/<name>.jl` (a module `<name>`,
+whose exported names `system.jl` can use) and runs `system.jl`, whose [`@component`](@ref),
+[`@source`](@ref) and [`@system`](@ref) fill the returned [`Project`](@ref). Both run in a new
+module of their own, which `using BeamletOptics, BeamletOpticsProjects`.
+
+Errors name the line of `system.jl`. The versions in `Project.toml` are not checked.
 """
 function load_project(path::AbstractString)
-    error("load_project is not implemented yet")
+    path = abspath(path)
+    file = joinpath(path, "system.jl")
+    isfile(file) || throw(ArgumentError("no system.jl in \"$path\""))
+    name = _project_name(path)
+    mod = _project_module(path, name)
+    p = Project(path, name)
+    p.mod = mod
+    task_local_storage(_LOADING, p) do
+        Base.include(mod, file)
+    end
+    return p
+end
+
+"""The name of the project in `path`: `name` of its `Project.toml`, else of the folder."""
+function _project_name(path)
+    toml = joinpath(path, "Project.toml")
+    isfile(toml) && return String(get(TOML.parsefile(toml), "name", _module_name(path)))
+    return _module_name(path)
+end
+
+"""A valid module name from the name of the folder `path`."""
+function _module_name(path)
+    s = replace(basename(rstrip(abspath(path), ['/', '\\'])), r"[^A-Za-z0-9_]" => "_")
+    s = isempty(s) || !isletter(s[1]) ? "Project_" * s : s
+    return uppercase(s[1:1]) * s[2:end]
+end
+
+"""A new module with BeamletOptics, BeamletOpticsProjects and the own code of the project."""
+function _project_module(path, name)
+    mod = Module(:SystemModule)
+    # The packages by identity, so that it works in any active environment
+    Core.eval(mod, :(const BeamletOptics = $BMO))
+    Core.eval(mod, :(const BeamletOpticsProjects = $(@__MODULE__)))
+    Core.eval(mod, :(using .BeamletOptics, .BeamletOpticsProjects))
+    src = joinpath(path, "src", name * ".jl")
+    if isfile(src)
+        Base.include(mod, src)
+        sym = Symbol(name)
+        # The module was defined by the include, in a newer world than this function's
+        Base.invokelatest(isdefined, mod, sym) &&
+            Base.invokelatest(getfield, mod, sym) isa Module &&
+            Core.eval(mod, :(using .$sym))
+    end
+    return mod
 end

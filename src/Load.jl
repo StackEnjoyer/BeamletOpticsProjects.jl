@@ -16,7 +16,7 @@ function load_project(path::AbstractString)
     path = abspath(path)
     file = joinpath(path, "system.jl")
     isfile(file) || throw(ArgumentError("no system.jl in \"$path\""))
-    name = _project_name(path)
+    name = project_name(path)
     mod = _project_module(path, name)
     p = Project(path, name)
     p.mod = mod
@@ -26,15 +26,24 @@ function load_project(path::AbstractString)
     return p
 end
 
-"""The name of the project in `path`: `name` of its `Project.toml`, else of the folder."""
-function _project_name(path)
+"""
+    project_name(path) -> String
+
+The module name of the project in the folder `path`: `name` of its `Project.toml`, else
+[`module_name`](@ref) of the folder.
+"""
+function project_name(path)
     toml = joinpath(path, "Project.toml")
-    isfile(toml) && return String(get(TOML.parsefile(toml), "name", _module_name(path)))
-    return _module_name(path)
+    isfile(toml) && return String(get(TOML.parsefile(toml), "name", module_name(path)))
+    return module_name(path)
 end
 
-"""A valid module name from the name of the folder `path`."""
-function _module_name(path)
+"""
+    module_name(path) -> String
+
+A valid module name from the name of the folder `path`, e.g. `"Laser_bench"` for `laser-bench`.
+"""
+function module_name(path)
     s = replace(basename(rstrip(abspath(path), ['/', '\\'])), r"[^A-Za-z0-9_]" => "_")
     s = isempty(s) || !isletter(s[1]) ? "Project_" * s : s
     return uppercase(s[1:1]) * s[2:end]

@@ -16,7 +16,7 @@ Creates an empty project in the folder `path`:
 
 Throws if `path` is a project already.
 """
-function new_project(path::AbstractString; name::AbstractString = _module_name(path),
+function new_project(path::AbstractString; name::AbstractString = module_name(path),
         packages::Vector{Module} = Module[])
     path = abspath(path)
     isfile(joinpath(path, "Project.toml")) &&

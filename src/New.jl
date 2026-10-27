@@ -12,10 +12,13 @@ Creates an empty project in the folder `path`:
   BeamletOpticsProjects and the modules `packages` (e.g. BeamletOpticsGUI, GLMakie);
 - `src/<name>.jl` with the module `<name>` for own code;
 - `system.jl` without entries;
-- `AGENTS.md` and `CLAUDE.md` with the instructions for agents, `.gitignore` and
-  `.claude/settings.json`, whose hook shows `.bmo/session*.md` (the selection and the recent
-  actions in every open GUI window) to Claude Code with every prompt when Claude Code is started in the
-  project folder;
+- `AGENTS.md` and `CLAUDE.md` with the instructions for agents that are specific to the project,
+  `.gitignore` and `.claude/settings.json`, whose hook shows `.bmo/session*.md` (the selection and
+  the recent actions in every open GUI window) to Claude Code with every prompt when Claude Code is
+  started in the project folder;
+- the agent skills of the installed BeamletOptics and BeamletOpticsProjects in `.claude/skills/`
+  (see `install_agent_skill` of both), which `.gitignore` keeps out of the versions: they come
+  from the packages in the versions the project pins;
 - the project file `<folder name>.bmo`, by which people open it, see [`project_marker`](@ref).
 
 Then saves the first version, "New project", see [`save_version`](@ref): in the git repository
@@ -78,11 +81,24 @@ function _scaffold(path, name, packages)
     write_new(joinpath("src", name * ".jl"), _module_template(name))
     write_new("AGENTS.md", _agents_template(name))
     write_new("CLAUDE.md", "@AGENTS.md\n")
-    write_new(".gitignore", "Manifest.toml\n*.tmp\n.bmo/\n")
+    write_new(".gitignore", "Manifest.toml\n*.tmp\n.bmo/\n.claude/skills/\n")
     mkpath(joinpath(path, ".claude"))
     write_new(joinpath(".claude", "settings.json"), _claude_settings())
+    _install_skills(joinpath(path, ".claude", "skills"))
     marker = project_marker(path)
     isfile(marker) || write(marker, _marker_text(splitext(basename(marker))[1]))
+    return nothing
+end
+
+"""
+Installs the agent skills of BeamletOptics and BeamletOpticsProjects into `dest`, each only if it
+is not there yet, without their messages.
+"""
+function _install_skills(dest)
+    Base.CoreLogging.with_logger(Base.CoreLogging.NullLogger()) do
+        isdir(joinpath(dest, "beamletoptics")) || BMO.install_agent_skill(dest)
+        isdir(joinpath(dest, "beamletopticsprojects")) || install_agent_skill(dest)
+    end
     return nothing
 end
 
@@ -121,78 +137,43 @@ _module_template(name) = """
 _agents_template(name) = """
     # Project $name (BeamletOptics)
 
-    An optical setup of [BeamletOptics](https://github.com/JuliaPhysics/BeamletOptics.jl), saved by
-    the GUI (BeamletOpticsGUI) or written by an agent. People change it in the GUI, agents in the code.
+    An optical setup of [BeamletOptics](https://github.com/JuliaPhysics/BeamletOptics.jl) as a
+    project of BeamletOpticsProjects. People change it in the GUI (BeamletOpticsGUI), agents in the
+    code, at the same time.
+
+    ## Skills
+
+    How to work on a project (the form of `system.jl`, `load_project`, `trace`, `look`, the open
+    windows, taking part, versions) is in the agent skill `beamletopticsprojects`, the optics in
+    `beamletoptics`, the window in `beamletopticsgui`. They come from the installed packages, in the
+    versions this project pins (`Project.toml`), and lie in `.claude/skills/` (not part of the
+    versions). Read them before you change the project. If one is missing or the packages were
+    updated, install them again from the packages, in this folder and in the environment of this
+    project (`julia --project=.`, which loads the versions it pins):
+
+    ```julia
+    using BeamletOptics, BeamletOpticsProjects
+    BeamletOptics.install_agent_skill()
+    BeamletOpticsProjects.install_agent_skill()
+    using BeamletOpticsGUI; BeamletOpticsGUI.install_agent_skill()   # if the GUI is installed
+    ```
 
     ## Files
 
-    - `system.jl`: the setup. The GUI rewrites it on every save; agents may edit it in the form below.
-    - `src/$name.jl`: own code (module `$name`): functions that build components or groups, own types.
-      Its exported names can be used in `system.jl`. The GUI never writes it.
-    - `view.toml`: view state of the GUI (camera, colors, clip planes). Do not edit it.
-    - `*.bmo`: the project file that people open; it only marks the folder. Do not edit it.
+    - `system.jl`: the setup, one line per component, source and system.
+    - `src/$name.jl`: own code (module `$name`): functions that build components or groups, own
+      types. Its exported names can be used in `system.jl`. The GUI never writes it.
+    - `view.toml`, `*.bmo`, `.bmo/`: belong to the windows, see the skill `beamletopticsprojects`.
     - `Project.toml`: the versions this project was made with (`[compat]`).
-    - `.bmo/`: written by the open GUI (`session-<person>.md`, `presence-*.toml`, `view-*.toml`); not part of the versions. Do not edit it, except your own files (see "Taking part").
-
-    ## The form of `system.jl`
-
-    One line per entry; components first, then sources, then systems:
-
-    ```julia
-    @component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, λ -> 1.5) pos = (0.0, 0.1, 0.0)
-    @component M1 = RightAnglePrismMirror(0.025, 0.025) pos = (0.0, 0.2, 0.0) rot = (0.0, 0.0, 90.0)
-    @source B1 = Beam([0.0, 0.0, 0.0], [0.0, 1.0, 0.0], 1.064e-6) pos = (0.0, -0.05, 0.0)
-    @system S1 = [L1, M1] sources = [B1]
-    ```
-
-    - The name after `@component`/`@source`/`@system` is the readable **id** (`L1`, `M2`, `D3`, `BS1`, `B1`,
-      `S1`: a prefix of the family and a number). It is unique and stays; never rename an id. Give a new
-      line the next free number of its prefix.
-    - `label = "…"` is the name that people see and change in the GUI; optional.
-    - `uid = "…"` (always last) is the machine id by which the GUI recognizes the line. Never change or
-      copy it; a new line has no `uid`, it gets one when the GUI saves.
-    - The right-hand side is any expression that builds a BeamletOptics component, group or source,
-      also a call of a function of `src/$name.jl`. SI units: m, wavelengths in m.
-    - `pos` is the absolute position (m), `rot` the rotation since construction in degrees: first
-      about the global x-axis, then y, then z. Both are optional.
-    - `catalog = (...)` belongs to the GUI (its page "Edit"); delete it when you change the constructor.
-    - `@system`: members are components; a component may be in several systems, a source in at most
-      one. `static = true` makes a `StaticSystem`.
-
-    ## The open windows
-
-    Several people may have the project open in their own windows while you work on it.
-
-    - The window saves every finished action of the person to `system.jl` within about a second, so
-      `system.jl` is what the person sees. It reloads `system.jl` and `src/` when you change them, and
-      it never overwrites your changes silently: if both changed the same line, it asks the person.
-    - Each window writes `.bmo/session-<person>.md`: the selection and the recent actions of its
-      person. If Claude Code was started in this folder, its hook shows all of them with every
-      prompt; otherwise read `.bmo/session*.md` when a person refers to "this" or "what I just did".
-      The other files in `.bmo/` (`presence-*.toml`, `view-*.toml`) belong to the windows; do not
-      edit them (your own `*@agent` files are the exception, see "Taking part").
-    - Edit single lines of `system.jl`. Never rewrite the whole file from an older read: it would undo
-      what the person did meanwhile. Read the file again after any failed edit.
-    - If a save of yours fails with `ProjectChanged`, load the project again instead of forcing it.
-    - Versions are the person's: `Ctrl+S` in the window saves one (`git log -- system.jl` shows them).
-      Do not commit unless the person asks.
-
-    ## Taking part
-
-    The windows of the people show you too, at the object you work on.
-
-    - Before you change the project, write `.bmo/presence-<your name>@agent.toml` (e.g.
-      `claude@agent`), a TOML with `name` (how people see you, e.g. "Claude (Opus 5.5)"),
-      `kind = "agent"`, `beat` (an integer; increase it by one at every write), `ttl = 600`,
-      `selected_id` (the id of the line you work on, `""` if none) and `doing` (a few words).
-    - Write it again when you go to another object; delete it when you are done.
-    - Optionally `.bmo/session-<your name>@agent.md`: a few lines of what you do, for other agents.
 
     ## Check
 
     ```julia
     using BeamletOptics, BeamletOpticsProjects
     p = load_project(".")   # throws with the line of system.jl on errors
+    r = trace(p, :S1)       # solves the system S1 with its sources
+    r.detectors             # hits and power of each detector of S1
+    look(p)                 # the setup as text: chains of ids, distances, detectors, participants
     ```
     """
 

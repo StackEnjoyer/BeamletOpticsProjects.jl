@@ -23,8 +23,12 @@ const BMO = BeamletOptics
 export Project, Entry, SystemEntry, new_project, load_project, save_project, system_code,
        project_file, project_marker, project_dir, project_stamp, ProjectChanged, apply_pose!,
        rotation_matrix, @component, @source, @system, id_prefix, next_id, diff_projects,
-       EntryChange, SystemChange, copy_code, save_version, version_summary, versions
-public project_name, module_name, normalize_code, EXTENSION, same_entry, same_system, new_uid, match_entries
+       EntryChange, SystemChange, copy_code, save_version, version_summary, versions, trace, look,
+       announce, leave, fork_team, teams, post!, board, claim!, release!, wait_for, merge_draft!,
+       evaluate
+public project_name, module_name, normalize_code, EXTENSION, same_entry, same_system, new_uid, match_entries,
+       install_agent_skill, person, presence_file, session_file, write_presence, read_presences, alive,
+       merge_plan
 
 """Version of the format of `system.jl`, written to `[beamletoptics] format` of `Project.toml`."""
 const FORMAT = 1
@@ -156,5 +160,12 @@ include("New.jl")
 include("Ids.jl")
 include("Diff.jl")
 include("Versions.jl")
+include("AgentSkill.jl")
+include("Trace.jl")
+include("Look.jl")
+include("Participants.jl")
+include("Merge.jl")
+include("Teams.jl")
+include("Guards.jl")
 
 end

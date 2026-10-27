@@ -7,7 +7,7 @@ install needed). The repository is the one that holds the folder, or a new one i
     save_version(dir; message = nothing) -> Union{Nothing, String}
 
 Saves a version of the project in the folder `dir`: commits its files (respecting `.gitignore`,
-also deleted files, never `.bmo/`) to the git repository that holds the folder, or to a new one in the folder if
+also deleted files, never `.bmo/` or `.claude/skills/`) to the git repository that holds the folder, or to a new one in the folder if
 there is none. Returns the id of the commit, or `nothing` if nothing changed since the last version.
 `message = nothing` uses [`version_summary`](@ref), or `"Changed <files>"` if that is empty while
 other files of the folder changed.
@@ -39,9 +39,11 @@ function save_version(dir::AbstractString; message::Union{Nothing, AbstractStrin
             LibGit2.with(LibGit2.GitIndex, repo) do idx
                 LibGit2.add!(idx, spec)
                 LibGit2.update!(idx, spec)
-                # The state of the open window (`.bmo/`) is never a part of a version, also in a
-                # project whose `.gitignore` does not name it
+                # The state of the open window (`.bmo/`) and the installed skills (`.claude/skills/`)
+                # are never a part of a version, also in a project whose `.gitignore` does not
+                # name them
                 LibGit2.remove!(idx, _pathspec(rel, ".bmo/*"))
+                LibGit2.remove!(idx, _pathspec(rel, ".claude/skills/*"))
                 LibGit2.write!(idx)
                 LibGit2.write_tree!(idx)
             end

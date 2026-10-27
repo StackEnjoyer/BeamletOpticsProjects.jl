@@ -104,6 +104,23 @@ end
     @test save_version(dir) === nothing
 end
 
+@testset ".claude/skills/ is never a part of a version, also without a .gitignore entry" begin
+    dir = joinpath(mktempdir(), "Old")
+    mkpath(joinpath(dir, ".claude", "skills", "x"))
+    write(joinpath(dir, "system.jl"), system_file(lens(:L1)))
+    write(joinpath(dir, ".gitignore"), "Manifest.toml
+*.tmp
+.bmo/
+")
+    write(joinpath(dir, ".claude", "skills", "x", "SKILL.md"), "a skill")
+    id = save_version(dir; message = "first")
+    LibGit2.with(LibGit2.GitRepo(dir)) do repo
+        @test sort(changed_paths(repo, id)) == [".gitignore", "system.jl"]
+    end
+    write(joinpath(dir, ".claude", "skills", "x", "SKILL.md"), "a skill, later")
+    @test save_version(dir) === nothing
+end
+
 @testset "new_project inside a repository" begin
     root = mktempdir()
     LibGit2.with(LibGit2.init(root)) do repo
@@ -198,9 +215,13 @@ end
     cmd = match(r"\"command\": \"((?:[^\"\\]|\\.)*)\"", settings).captures[1]
     cmd = replace(cmd, "\\\"" => "\"")
     @test cmd == P._SESSION_HOOK
+    # The open windows and their session files are explained by the skill of the package, which
+    # the project's AGENTS.md names
     agents = read(joinpath(dir, "AGENTS.md"), String)
-    @test occursin("## The open windows", agents) && occursin(".bmo/session-<person>.md", agents) &&
-occursin(".bmo/session*.md", agents)
+    skill = read(joinpath(pkgdir(P), "skills", "beamletopticsprojects", "SKILL.md"), String)
+    @test occursin("beamletopticsprojects", agents)
+    @test occursin("## The open windows", skill) && occursin(".bmo/session-<person>.md", skill) &&
+          occursin(".bmo/session*.md", skill)
     bash = Sys.which("bash")
     if isnothing(bash)
         @info "No bash: the hook is not run"
@@ -238,7 +259,7 @@ occursin(".bmo/session*.md", agents)
     @test isfile(joinpath(other, ".claude", "settings.json"))
     @test [v.message for v in versions(other)] == ["New project"]
     # The hook only runs if Claude Code was started in the project folder
-    @test occursin("If Claude Code was started in this folder", replace(agents, r"\s+" => " "))
+    @test occursin("If Claude Code was started in the project folder", replace(skill, r"\s+" => " "))
 end
 
 @testset "a locked repository" begin

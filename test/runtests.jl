@@ -6,4 +6,6 @@ using Test
     include(joinpath(@__DIR__, "TestWrite.jl"))
     include(joinpath(@__DIR__, "TestNew.jl"))
     include(joinpath(@__DIR__, "TestStamp.jl"))
+    include(joinpath(@__DIR__, "TestIds.jl"))
+    include(joinpath(@__DIR__, "TestDiff.jl"))
 end

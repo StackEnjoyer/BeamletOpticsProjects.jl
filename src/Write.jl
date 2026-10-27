@@ -33,6 +33,7 @@ function _entry_line(e::Entry)
     for (k, v) in e.meta
         print(io, " ", k, " = ", _code_string(v))
     end
+    _print_ids(io, e)
     return String(take!(io))
 end
 
@@ -41,7 +42,15 @@ function _system_line(s::SystemEntry)
     print(io, "@system ", s.name, " = [", join(s.members, ", "), "]")
     isempty(s.sources) || print(io, " sources = [", join(s.sources, ", "), "]")
     s.static && print(io, " static = true")
+    _print_ids(io, s)
     return String(take!(io))
+end
+
+# The label (if any) and the machine id (if any) at the end of a line
+function _print_ids(io, x)
+    isnothing(x.label) || print(io, " label = ", repr(x.label))
+    isnothing(x.uid) || print(io, " uid = ", repr(x.uid))
+    return nothing
 end
 
 """Code on one line: an expression as Julia prints it, a string of code parsed first."""
@@ -108,6 +117,7 @@ check.
 function save_project(p::Project; packages::Vector{Module} = Module[], force::Bool = false)
     force || isnothing(p.stamp) || !isfile(project_file(p, "system.jl")) ||
         project_stamp(p.path) == p.stamp || throw(ProjectChanged(p.path))
+    _give_uids!(p)
     mkpath(p.path)
     isfile(project_file(p, "Project.toml")) || _scaffold(p.path, p.name, packages)
     # A project of the time before project files
@@ -127,6 +137,21 @@ function save_project(p::Project, path::AbstractString; packages::Vector{Module}
         p.stamp = nothing
     end
     return save_project(p; packages, force)
+end
+
+"""Gives every entry and system of `p` without a machine id a new one (a UUID)."""
+function _give_uids!(p::Project)
+    for (i, e) in enumerate(p.entries)
+        isnothing(e.uid) || continue
+        p.entries[i] = Entry(e.kind, e.name, e.code, e.object, e.pos, e.rot, e.pose0, e.meta, e.label,
+            string(uuid4()))
+    end
+    for (i, s) in enumerate(p.systems)
+        isnothing(s.uid) || continue
+        p.systems[i] = SystemEntry(s.name, s.members, s.sources, s.static, s.object, s.label,
+            string(uuid4()))
+    end
+    return p
 end
 
 """Writes `text` to a temporary file next to `file` and then moves it there."""

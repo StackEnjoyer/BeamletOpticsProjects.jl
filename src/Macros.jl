@@ -65,13 +65,17 @@ end
 
 function _entry_macro(kind::Symbol, src, args)
     name, ex, kws, where = _split_args("@$kind", src, args)
-    pos = rot = nothing
+    pos = rot = label = uid = nothing
     meta = Expr[]
     for (k, v) in kws
         if k === :pos
             pos = esc(v)
         elseif k === :rot
             rot = esc(v)
+        elseif k === :label
+            label = esc(v)
+        elseif k === :uid
+            uid = esc(v)
         else
             push!(meta, :($(QuoteNode(k)) => $(esc(v))))
         end
@@ -79,16 +83,20 @@ function _entry_macro(kind::Symbol, src, args)
     code = QuoteNode(normalize_code(ex))
     return quote
         $(esc(name)) = $(_register_entry!)($(QuoteNode(kind)), $(QuoteNode(name)), $code,
-            $(esc(ex)), $pos, $rot, Pair{Symbol, Any}[$(meta...)], $where)
+            $(esc(ex)), $pos, $rot, Pair{Symbol, Any}[$(meta...)], $label, $uid, $where)
     end
 end
 
 function _system_macro(src, args)
     name, members, kws, where = _split_args("@system", src, args)
-    sources, static = :([]), false
+    sources, static, label, uid = :([]), false, nothing, nothing
     for (k, v) in kws
         if k === :sources
             sources = v
+        elseif k === :label
+            label = esc(v)
+        elseif k === :uid
+            uid = esc(v)
         elseif k === :static
             v isa Bool || throw(ArgumentError("$where: static must be true or false"))
             static = v
@@ -99,7 +107,7 @@ function _system_macro(src, args)
     m, s = _names(members, "members", where), _names(sources, "sources", where)
     # Outside of `load_project` the names are the variables that @component and @source bound
     return quote
-        $(esc(name)) = $(_register_system!)($(QuoteNode(name)), $m, $s, $static, $where,
+        $(esc(name)) = $(_register_system!)($(QuoteNode(name)), $m, $s, $static, $label, $uid, $where,
             () -> Any[$(map(esc, m)...)], () -> Any[$(map(esc, s)...)])
     end
 end
@@ -116,23 +124,25 @@ _taken(p::Project, name::Symbol) = any(e -> e.name === name, p.entries) ||
                                    any(s -> s.name === name, p.systems)
 
 function _register_entry!(kind::Symbol, name::Symbol, code, @nospecialize(obj), pos, rot, meta,
-        where::String)
+        label, uid, where::String)
     p = _loading()
     p !== nothing && _taken(p, name) &&
         throw(ArgumentError("$where: the name `$name` is used twice"))
+    p === nothing || _check_uid(p, uid, where)
     pose0 = pose_of(obj)
     apply_pose!(obj, pos, rot)
-    p === nothing || push!(p.entries, Entry(kind, name, code, obj; pos, rot, pose0, meta))
+    p === nothing || push!(p.entries, Entry(kind, name, code, obj; pos, rot, pose0, meta, label, uid))
     return obj
 end
 
 function _register_system!(name::Symbol, members::Vector{Symbol}, sources::Vector{Symbol},
-        static::Bool, where::String, member_objects, source_objects)
+        static::Bool, label, uid, where::String, member_objects, source_objects)
     p = _loading()
     if p === nothing
         objs, srcs = member_objects(), source_objects()
     else
         _taken(p, name) && throw(ArgumentError("$where: the name `$name` is used twice"))
+        _check_uid(p, uid, where)
         objs = Any[_lookup(p, n, :component, where) for n in members]
         srcs = Any[_lookup(p, n, :source, where) for n in sources]
         for n in sources, s in p.systems
@@ -141,8 +151,16 @@ function _register_system!(name::Symbol, members::Vector{Symbol}, sources::Vecto
         end
     end
     sys = static ? StaticSystem(objs) : isempty(objs) ? System() : System(objs)
-    p === nothing || push!(p.systems, SystemEntry(name, members, sources; static, object = sys))
+    p === nothing || push!(p.systems, SystemEntry(name, members, sources; static, object = sys, label, uid))
     return sys
+end
+
+"""Throws if the machine id `uid` is in `p` already, e.g. a line that was copied with it."""
+function _check_uid(p::Project, uid, where::String)
+    isnothing(uid) && return nothing
+    uid isa AbstractString || throw(ArgumentError("$where: uid must be a string"))
+    any(e -> e.uid == uid, p.entries) || any(s -> s.uid == uid, p.systems) || return nothing
+    throw(ArgumentError("$where: the uid \"$uid\" is used twice; a new line has no uid, it gets one when it is saved"))
 end
 
 function _lookup(p::Project, name::Symbol, kind::Symbol, where::String)

@@ -101,7 +101,12 @@ _agents_template(name) = """
     @system S1 = [L1, M1] sources = [B1]
     ```
 
-    - Names are unique identifiers; the GUI shows them as labels.
+    - The name after `@component`/`@source`/`@system` is the readable **id** (`L1`, `M2`, `D3`, `BS1`, `B1`,
+      `S1`: a prefix of the family and a number). It is unique and stays; never rename an id. Give a new
+      line the next free number of its prefix.
+    - `label = "…"` is the name that people see and change in the GUI; optional.
+    - `uid = "…"` (always last) is the machine id by which the GUI recognizes the line. Never change or
+      copy it; a new line has no `uid`, it gets one when the GUI saves.
     - The right-hand side is any expression that builds a BeamletOptics component, group or source,
       also a call of a function of `src/$name.jl`. SI units: m, wavelengths in m.
     - `pos` is the absolute position (m), `rot` the rotation since construction in degrees: first

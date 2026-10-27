@@ -20,21 +20,25 @@ const BMO = BeamletOptics
 
 export Project, Entry, SystemEntry, new_project, load_project, save_project, system_code,
        project_file, project_marker, project_dir, project_stamp, ProjectChanged, apply_pose!,
-       rotation_matrix, @component, @source, @system
+       rotation_matrix, @component, @source, @system, id_prefix, next_id, diff_projects,
+       EntryChange, SystemChange, copy_code
 public project_name, module_name, normalize_code, EXTENSION
 
 """Version of the format of `system.jl`, written to `[beamletoptics] format` of `Project.toml`."""
 const FORMAT = 1
 
 """
-    Entry(kind, name, code, object; pos = nothing, rot = nothing, pose0, meta = Pair{Symbol, Any}[])
+    Entry(kind, name, code, object; pos = nothing, rot = nothing, pose0, meta = Pair{Symbol, Any}[],
+          label = nothing, uid = nothing)
 
 One `@component` (`kind = :component`) or `@source` (`kind = :source`) of a project: its unique
-`name`, the constructor expression `code`, the constructed and posed `object`, its pose `pos`
+readable id `name` (e.g. `L1`, see [`next_id`](@ref)), the constructor expression `code`, the constructed and posed `object`, its pose `pos`
 (absolute position in m, `nothing` = as constructed) and `rot` (rotation since construction, as
 `(x, y, z)` angles in degrees, extrinsic `Rz(z)·Ry(y)·Rx(x)`, or a 3×3 matrix, `nothing` = none),
 the pose `pose0 = (position, frame)` right after construction and further keywords `meta`, which
-the project keeps but does not interpret (e.g. `:catalog` of the GUI).
+the project keeps but does not interpret (e.g. `:catalog` of the GUI), the `label` that is shown
+instead of the id (`nothing`: the id) and the machine id `uid`, a UUID that never changes
+(`nothing` until the first save), by which the GUI recognizes the entry after a rename.
 
 The `frame` of `pose0` is the orientation, or for things with only a direction (beams) a
 right-handed frame with the local y-axis along the direction, see `frame`.
@@ -48,10 +52,12 @@ struct Entry
     rot::Union{Nothing, NTuple{3, Float64}, Matrix{Float64}}
     pose0::Tuple{Vector{Float64}, Matrix{Float64}}
     meta::Vector{Pair{Symbol, Any}}
+    label::Union{Nothing, String}
+    uid::Union{Nothing, String}
 end
 
 function Entry(kind::Symbol, name, code, object; pos = nothing, rot = nothing, pose0,
-        meta = Pair{Symbol, Any}[])
+        meta = Pair{Symbol, Any}[], label = nothing, uid = nothing)
     kind in (:component, :source) ||
         throw(ArgumentError("kind must be :component or :source, got :$kind"))
     pos = pos === nothing ? nothing : NTuple{3, Float64}(Tuple(pos))
@@ -59,14 +65,19 @@ function Entry(kind::Symbol, name, code, object; pos = nothing, rot = nothing, p
           rot isa AbstractMatrix ? Matrix{Float64}(rot) : NTuple{3, Float64}(Tuple(rot))
     pose0 = (Vector{Float64}(pose0[1]), Matrix{Float64}(pose0[2]))
     return Entry(kind, Symbol(name), code, object, pos, rot, pose0,
-        Pair{Symbol, Any}[Symbol(k) => v for (k, v) in meta])
+        Pair{Symbol, Any}[Symbol(k) => v for (k, v) in meta], _string_or_nothing(label),
+        _string_or_nothing(uid))
 end
 
-"""
-    SystemEntry(name, members, sources = Symbol[]; static = false, object = nothing)
+_string_or_nothing(::Nothing) = nothing
+_string_or_nothing(s) = String(s)
 
-One `@system` of a project: its `name`, the names of its `members` and `sources`, whether it is
-a `StaticSystem` and the built system `object`.
+"""
+    SystemEntry(name, members, sources = Symbol[]; static = false, object = nothing, label = nothing,
+                uid = nothing)
+
+One `@system` of a project: its readable id `name`, the ids of its `members` and `sources`, whether
+it is a `StaticSystem`, the built system `object`, its `label` and machine id `uid`, see [`Entry`](@ref).
 """
 struct SystemEntry
     name::Symbol
@@ -74,10 +85,14 @@ struct SystemEntry
     sources::Vector{Symbol}
     static::Bool
     object::Any
+    label::Union{Nothing, String}
+    uid::Union{Nothing, String}
 end
 
-SystemEntry(name, members, sources = Symbol[]; static::Bool = false, object = nothing) =
-    SystemEntry(Symbol(name), Symbol.(collect(members)), Symbol.(collect(sources)), static, object)
+SystemEntry(name, members, sources = Symbol[]; static::Bool = false, object = nothing,
+    label = nothing, uid = nothing) =
+    SystemEntry(Symbol(name), Symbol.(collect(members)), Symbol.(collect(sources)), static, object,
+        _string_or_nothing(label), _string_or_nothing(uid))
 
 """
     Project(path, name; entries = Entry[], systems = SystemEntry[])
@@ -136,5 +151,7 @@ include("Macros.jl")
 include("Load.jl")
 include("Write.jl")
 include("New.jl")
+include("Ids.jl")
+include("Diff.jl")
 
 end

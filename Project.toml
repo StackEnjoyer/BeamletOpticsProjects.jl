@@ -8,6 +8,8 @@ projects = ["test"]
 
 [deps]
 BeamletOptics = "c387492b-ffec-4e51-9a46-bd230226031c"
+Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
+LibGit2 = "76f85450-5226-5b5a-8eaa-529ad045b433"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 SHA = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 TOML = "fa267f1f-6049-4f14-aa54-33bafae1ed76"
@@ -18,6 +20,8 @@ BeamletOptics = {url = "https://github.com/JuliaPhysics/BeamletOptics.jl", rev =
 
 [compat]
 BeamletOptics = "0.14"
+Dates = "1"
+LibGit2 = "1"
 LinearAlgebra = "1"
 SHA = "0.7, 1"
 TOML = "1"

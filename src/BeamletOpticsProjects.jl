@@ -11,6 +11,8 @@ See [`load_project`](@ref), [`save_project`](@ref), [`new_project`](@ref) and th
 module BeamletOpticsProjects
 
 using BeamletOptics
+using Dates: DateTime, unix2datetime
+using LibGit2
 using LinearAlgebra
 using SHA
 using TOML
@@ -21,7 +23,7 @@ const BMO = BeamletOptics
 export Project, Entry, SystemEntry, new_project, load_project, save_project, system_code,
        project_file, project_marker, project_dir, project_stamp, ProjectChanged, apply_pose!,
        rotation_matrix, @component, @source, @system, id_prefix, next_id, diff_projects,
-       EntryChange, SystemChange, copy_code
+       EntryChange, SystemChange, copy_code, save_version, version_summary, versions
 public project_name, module_name, normalize_code, EXTENSION, same_entry, same_system, new_uid, match_entries
 
 """Version of the format of `system.jl`, written to `[beamletoptics] format` of `Project.toml`."""
@@ -153,5 +155,6 @@ include("Write.jl")
 include("New.jl")
 include("Ids.jl")
 include("Diff.jl")
+include("Versions.jl")
 
 end

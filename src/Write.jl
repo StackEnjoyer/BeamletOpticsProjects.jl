@@ -107,7 +107,8 @@ end
 
 Writes `system.jl` of `project` (in the folder `path`, which becomes the folder of the project)
 and returns its path. A folder that is not a project yet gets the files of [`new_project`](@ref),
-whose `Project.toml` records the versions of BeamletOptics, BeamletOpticsProjects and `packages`.
+whose `Project.toml` records the versions of BeamletOptics, BeamletOpticsProjects and `packages`,
+and its first version (see [`save_version`](@ref)).
 
 Throws [`ProjectChanged`](@ref) and writes nothing if the files changed since the project was
 loaded or saved (its `stamp`, see [`project_stamp`](@ref)), unless `force` is `true`. Afterwards
@@ -119,12 +120,15 @@ function save_project(p::Project; packages::Vector{Module} = Module[], force::Bo
         project_stamp(p.path) == p.stamp || throw(ProjectChanged(p.path))
     _give_uids!(p)
     mkpath(p.path)
-    isfile(project_file(p, "Project.toml")) || _scaffold(p.path, p.name, packages)
+    fresh = !isfile(project_file(p, "Project.toml"))
+    fresh && _scaffold(p.path, p.name, packages)
     # A project of the time before project files
     marker = project_marker(p.path)
     isfile(marker) || write(marker, _marker_text(splitext(basename(marker))[1]))
     file = project_file(p, "system.jl")
     _write_atomic(file, system_code(p))
+    # A new project: its first version
+    fresh && _first_version(p.path)
     p.stamp = project_stamp(p.path)
     return file
 end

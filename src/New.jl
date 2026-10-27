@@ -12,8 +12,14 @@ Creates an empty project in the folder `path`:
   BeamletOpticsProjects and the modules `packages` (e.g. BeamletOpticsGUI, GLMakie);
 - `src/<name>.jl` with the module `<name>` for own code;
 - `system.jl` without entries;
-- `AGENTS.md` and `CLAUDE.md` with the instructions for agents, and `.gitignore`;
+- `AGENTS.md` and `CLAUDE.md` with the instructions for agents, `.gitignore` and
+  `.claude/settings.json`, whose hook shows `.bmo/session.md` (the selection and the recent
+  actions in the open GUI) to Claude Code with every prompt when Claude Code is started in the
+  project folder;
 - the project file `<folder name>.bmo`, by which people open it, see [`project_marker`](@ref).
+
+Then saves the first version, "New project", see [`save_version`](@ref): in the git repository
+that holds the folder, else in a new one in the folder.
 
 Throws if `path` is a project already.
 """
@@ -26,8 +32,43 @@ function new_project(path::AbstractString; name::AbstractString = module_name(pa
     _scaffold(path, String(name), packages)
     p = Project(path, name)
     _write_atomic(project_file(p, "system.jl"), system_code(p))
+    _first_version(path)
     return p
 end
+
+"""
+Saves the first version of a new project; warns instead of throwing if that is not possible (e.g.
+changes outside the folder are staged in the repository that holds it).
+"""
+function _first_version(path)
+    try
+        save_version(path; message = "New project")
+    catch e
+        e isa Union{ArgumentError, LibGit2.GitError} || rethrow()
+        @warn "The first version of the project at \"$path\" was not saved" exception = e
+    end
+    return nothing
+end
+
+"""The command of the hook of Claude Code that shows `.bmo/session.md` with every prompt."""
+const _SESSION_HOOK = raw"""cat "$CLAUDE_PROJECT_DIR/.bmo/session.md" 2>/dev/null || true"""
+
+_claude_settings() = """
+    {
+      "hooks": {
+        "UserPromptSubmit": [
+          {
+            "hooks": [
+              {
+                "type": "command",
+                "command": "$(replace(_SESSION_HOOK, '"' => "\\\""))"
+              }
+            ]
+          }
+        ]
+      }
+    }
+    """
 
 """Writes the files of a new project except `system.jl`; never overwrites one."""
 function _scaffold(path, name, packages)
@@ -37,7 +78,9 @@ function _scaffold(path, name, packages)
     write_new(joinpath("src", name * ".jl"), _module_template(name))
     write_new("AGENTS.md", _agents_template(name))
     write_new("CLAUDE.md", "@AGENTS.md\n")
-    write_new(".gitignore", "Manifest.toml\n*.tmp\n")
+    write_new(".gitignore", "Manifest.toml\n*.tmp\n.bmo/\n")
+    mkpath(joinpath(path, ".claude"))
+    write_new(joinpath(".claude", "settings.json"), _claude_settings())
     marker = project_marker(path)
     isfile(marker) || write(marker, _marker_text(splitext(basename(marker))[1]))
     return nothing
@@ -89,6 +132,7 @@ _agents_template(name) = """
     - `view.toml`: view state of the GUI (camera, colors, clip planes). Do not edit it.
     - `*.bmo`: the project file that people open; it only marks the folder. Do not edit it.
     - `Project.toml`: the versions this project was made with (`[compat]`).
+    - `.bmo/`: written by the open GUI (`session.md`); not part of the versions. Do not edit it.
 
     ## The form of `system.jl`
 
@@ -115,12 +159,21 @@ _agents_template(name) = """
     - `@system`: members are components; a component may be in several systems, a source in at most
       one. `static = true` makes a `StaticSystem`.
 
-    ## Working while the GUI is open
+    ## The open window
 
-    The GUI may have the project open. It reloads `system.jl` and `src/` when they change, and it never
-    overwrites them silently: if both changed, it asks the person. So write `system.jl` in one go (not
-    line by line over minutes), and if a save of yours fails with `ProjectChanged`, load the project
-    again instead of forcing it.
+    The GUI may have the project open while you work on it.
+
+    - The window saves every finished action of the person to `system.jl` within about a second, so
+      `system.jl` is what the person sees. It reloads `system.jl` and `src/` when you change them, and
+      it never overwrites your changes silently: if both changed the same line, it asks the person.
+    - `.bmo/session.md` lists the selection and the recent actions of the person in the window. If
+      Claude Code was started in this folder, its hook shows the file with every prompt; otherwise
+      read it when the person refers to "this" or "what I just did".
+    - Edit single lines of `system.jl`. Never rewrite the whole file from an older read: it would undo
+      what the person did meanwhile. Read the file again after any failed edit.
+    - If a save of yours fails with `ProjectChanged`, load the project again instead of forcing it.
+    - Versions are the person's: `Ctrl+S` in the window saves one (`git log -- system.jl` shows them).
+      Do not commit unless the person asks.
 
     ## Check
 

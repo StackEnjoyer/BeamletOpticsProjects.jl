@@ -5,7 +5,8 @@ Loading a project
 """
     load_project(path) -> Project
 
-Loads the project in the folder `path`: includes the own code `src/<name>.jl` (a module `<name>`,
+Loads the project in the folder `path`, or of the project file `path` (`<name>.bmo`, see
+[`project_marker`](@ref)): includes the own code `src/<name>.jl` (a module `<name>`,
 whose exported names `system.jl` can use) and runs `system.jl`, whose [`@component`](@ref),
 [`@source`](@ref) and [`@system`](@ref) fill the returned [`Project`](@ref). Both run in a new
 module of their own, which `using BeamletOptics, BeamletOpticsProjects`.
@@ -13,7 +14,7 @@ module of their own, which `using BeamletOptics, BeamletOpticsProjects`.
 Errors name the line of `system.jl`. The versions in `Project.toml` are not checked.
 """
 function load_project(path::AbstractString)
-    path = abspath(path)
+    path = project_dir(path)
     file = joinpath(path, "system.jl")
     isfile(file) || throw(ArgumentError("no system.jl in \"$path\""))
     name = project_name(path)
@@ -24,6 +25,36 @@ function load_project(path::AbstractString)
         Base.include(mod, file)
     end
     return p
+end
+
+"""File extension of the project file, see [`project_marker`](@ref)."""
+const EXTENSION = ".bmo"
+
+"""
+    project_marker(dir) -> String
+
+The path of the project file of the project in the folder `dir`: the file `*.bmo` in it, or
+`<folder name>.bmo` if there is none yet. People and the dialogs of the GUI open a project by it;
+it holds only the format, the project is the folder.
+"""
+function project_marker(dir::AbstractString)
+    dir = abspath(dir)
+    if isdir(dir)
+        for f in sort(readdir(dir))
+            endswith(f, EXTENSION) && isfile(joinpath(dir, f)) && return joinpath(dir, f)
+        end
+    end
+    return joinpath(dir, basename(rstrip(dir, ['/', '\\'])) * EXTENSION)
+end
+
+"""
+    project_dir(path) -> String
+
+The folder of a project from `path`, which is the folder or its project file (`*.bmo`).
+"""
+function project_dir(path::AbstractString)
+    path = abspath(path)
+    return endswith(path, EXTENSION) && !isdir(path) ? dirname(path) : rstrip(path, ['/', '\\'])
 end
 
 """

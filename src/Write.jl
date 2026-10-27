@@ -103,6 +103,9 @@ whose `Project.toml` records the versions of BeamletOptics, BeamletOpticsProject
 function save_project(p::Project; packages::Vector{Module} = Module[])
     mkpath(p.path)
     isfile(project_file(p, "Project.toml")) || _scaffold(p.path, p.name, packages)
+    # A project of the time before project files
+    marker = project_marker(p.path)
+    isfile(marker) || write(marker, _marker_text(splitext(basename(marker))[1]))
     file = project_file(p, "system.jl")
     _write_atomic(file, system_code(p))
     return file

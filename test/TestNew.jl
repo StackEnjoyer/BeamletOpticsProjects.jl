@@ -9,9 +9,21 @@ using Test
     p = new_project(dir; packages = [TOML])
     @test p.name == "Laser_bench"
     for f in ("Project.toml", "system.jl", "AGENTS.md", "CLAUDE.md", ".gitignore",
-              joinpath("src", "Laser_bench.jl"))
+              joinpath("src", "Laser_bench.jl"), "laser-bench.bmo")
         @test isfile(joinpath(dir, f))
     end
+    marker = joinpath(dir, "laser-bench.bmo")
+    @test project_marker(dir) == marker
+    @test TOML.parsefile(marker)["format"] == 1
+    # The project file opens the project; a renamed folder keeps its project file
+    @test load_project(marker).path == dir
+    @test project_dir(marker) == dir && project_dir(dir * "/") == dir
+    moved = joinpath(dirname(dir), "renamed")
+    mv(dir, moved)
+    @test project_marker(moved) == joinpath(moved, "laser-bench.bmo")
+    mv(moved, dir)
+    @test project_marker(joinpath(dirname(dir), "new folder")) ==
+          joinpath(dirname(dir), "new folder", "new folder.bmo")
     toml = TOML.parsefile(joinpath(dir, "Project.toml"))
     @test toml["name"] == "Laser_bench"
     @test toml["beamletoptics"]["format"] == 1

@@ -18,8 +18,9 @@ using UUIDs
 const BMO = BeamletOptics
 
 export Project, Entry, SystemEntry, new_project, load_project, save_project, system_code,
-       project_file, apply_pose!, rotation_matrix, @component, @source, @system
-public project_name, module_name, normalize_code
+       project_file, project_marker, project_dir, apply_pose!, rotation_matrix, @component,
+       @source, @system
+public project_name, module_name, normalize_code, EXTENSION
 
 """Version of the format of `system.jl`, written to `[beamletoptics] format` of `Project.toml`."""
 const FORMAT = 1

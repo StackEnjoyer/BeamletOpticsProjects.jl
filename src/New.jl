@@ -12,7 +12,8 @@ Creates an empty project in the folder `path`:
   BeamletOpticsProjects and the modules `packages` (e.g. BeamletOpticsGUI, GLMakie);
 - `src/<name>.jl` with the module `<name>` for own code;
 - `system.jl` without entries;
-- `AGENTS.md` and `CLAUDE.md` with the instructions for agents, and `.gitignore`.
+- `AGENTS.md` and `CLAUDE.md` with the instructions for agents, and `.gitignore`;
+- the project file `<folder name>.bmo`, by which people open it, see [`project_marker`](@ref).
 
 Throws if `path` is a project already.
 """
@@ -37,6 +38,8 @@ function _scaffold(path, name, packages)
     write_new("AGENTS.md", _agents_template(name))
     write_new("CLAUDE.md", "@AGENTS.md\n")
     write_new(".gitignore", "Manifest.toml\n*.tmp\n")
+    marker = project_marker(path)
+    isfile(marker) || write(marker, _marker_text(splitext(basename(marker))[1]))
     return nothing
 end
 
@@ -84,6 +87,7 @@ _agents_template(name) = """
     - `src/$name.jl`: own code (module `$name`): functions that build components or groups, own types.
       Its exported names can be used in `system.jl`. The GUI never writes it.
     - `view.toml`: view state of the GUI (camera, colors, clip planes). Do not edit it.
+    - `*.bmo`: the project file that people open; it only marks the folder. Do not edit it.
     - `Project.toml`: the versions this project was made with (`[compat]`).
 
     ## The form of `system.jl`
@@ -112,4 +116,10 @@ _agents_template(name) = """
     using BeamletOptics, BeamletOpticsProjects
     p = load_project(".")   # throws with the line of system.jl on errors
     ```
+    """
+
+_marker_text(name) = """
+    # BeamletOptics project "$name": open this file with BeamletOptics.
+    # The project is the folder of this file (system.jl, src/, view.toml, ...), see AGENTS.md.
+    format = $FORMAT
     """

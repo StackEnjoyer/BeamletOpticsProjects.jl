@@ -106,6 +106,16 @@ end
     @test_throws ArgumentError load_project(mktempdir())
 end
 
+@testset "a system before its members" begin
+    p = load_project(project_dir("""
+        @system S1 = [L1, T1] sources = [B1]
+        @component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5)
+        @component T1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5)
+        @source B1 = Beam([0.0, 0.0, 0.0], [0.0, 1.0, 0.0], 1.0e-6)
+        """))
+    @test p[:T1] in p[:S1].objects && p[:L1] in p[:S1].objects
+end
+
 @testset "include without a project" begin
     # A plain include builds and poses the objects and binds them to their names
     mod = Module()

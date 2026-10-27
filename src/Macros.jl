@@ -139,20 +139,38 @@ function _register_system!(name::Symbol, members::Vector{Symbol}, sources::Vecto
         static::Bool, label, uid, where::String, member_objects, source_objects)
     p = _loading()
     if p === nothing
-        objs, srcs = member_objects(), source_objects()
-    else
-        _taken(p, name) && throw(ArgumentError("$where: the name `$name` is used twice"))
-        _check_uid(p, uid, where)
-        objs = Any[_lookup(p, n, :component, where) for n in members]
-        srcs = Any[_lookup(p, n, :source, where) for n in sources]
-        for n in sources, s in p.systems
-            n in s.sources &&
-                throw(ArgumentError("$where: the source `$n` is already in the system `$(s.name)`"))
-        end
+        objs = member_objects()
+        return static ? StaticSystem(objs) : isempty(objs) ? System() : System(objs)
     end
-    sys = static ? StaticSystem(objs) : isempty(objs) ? System() : System(objs)
-    p === nothing || push!(p.systems, SystemEntry(name, members, sources; static, object = sys, label, uid))
-    return sys
+    _taken(p, name) && throw(ArgumentError("$where: the name `$name` is used twice"))
+    _check_uid(p, uid, where)
+    # Built when all lines are read (see `_build_systems!`): a member may be defined below
+    push!(p.systems, SystemEntry(name, members, sources; static, label, uid))
+    push!(get!(Vector{String}, task_local_storage(), _WHERE), where)
+    return nothing
+end
+
+"""Key of the places (`file:line`) of the systems of the project being loaded."""
+const _WHERE = :BeamletOpticsProjects_where
+
+"""
+Builds the systems of the project `p` that `load_project` read, after all lines: the members and
+sources by their ids, at the places `wheres` (`file:line`) for the error messages.
+"""
+function _build_systems!(p::Project, wheres::Vector{String})
+    taken = Dict{Symbol, Symbol}()
+    for (i, (se, where)) in enumerate(zip(p.systems, wheres))
+        objs = Any[_lookup(p, n, :component, where) for n in se.members]
+        foreach(n -> _lookup(p, n, :source, where), se.sources)
+        for n in se.sources
+            haskey(taken, n) &&
+                throw(ArgumentError("$where: the source `$n` is already in the system `$(taken[n])`"))
+            taken[n] = se.name
+        end
+        sys = se.static ? StaticSystem(objs) : isempty(objs) ? System() : System(objs)
+        p.systems[i] = SystemEntry(se.name, se.members, se.sources, se.static, sys, se.label, se.uid)
+    end
+    return p
 end
 
 """Throws if the machine id `uid` is in `p` already, e.g. a line that was copied with it."""

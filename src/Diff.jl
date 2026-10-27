@@ -91,20 +91,21 @@ function _pair(olds::Vector{T}, news::Vector{T}) where {T}
             push!(used, x.uid)
         end
     end
-    # A state of an agent's file before the first save: lines without uid, paired by their id
-    byname = Dict{Symbol, T}(x.name => x for x in olds if isnothing(x.uid))
+    # Lines of an agent without uid (or entries of a state before the first save): paired by their
+    # readable id with an old one that is not paired yet; a new one with an unknown uid only with
+    # an old one without uid
+    free = T[x for x in olds if isnothing(x.uid) || !(x.uid in used)]
     added = T[]
     for x in rest
-        old = get(byname, x.name, nothing)
-        if isnothing(old)
+        i = findfirst(o -> o.name === x.name && (isnothing(x.uid) || isnothing(o.uid)), free)
+        if isnothing(i)
             push!(added, x)
         else
-            push!(pairs, (old, x))
-            delete!(byname, x.name)
+            push!(pairs, (free[i], x))
+            deleteat!(free, i)
         end
     end
-    removed = T[x for x in olds if isnothing(x.uid) ? haskey(byname, x.name) : !(x.uid in used)]
-    return pairs, added, removed
+    return pairs, added, free
 end
 
 _code_key(@nospecialize(code)) = code isa AbstractString ? _code_key(Meta.parse(code)) :
@@ -145,4 +146,39 @@ function copy_code(from::AbstractString, to::AbstractString)
         cp(joinpath(root, f), target)
     end
     return nothing
+end
+
+"""
+    same_entry(a, b) -> Bool
+
+Whether the entries `a` and `b` (of two states of a project) describe the same thing: the same
+kind, readable id, code, pose, label and further keywords.
+"""
+same_entry(a::Entry, b::Entry) = a.kind == b.kind && a.name == b.name &&
+                                 _code_key(a.code) == _code_key(b.code) && _same_pose(a, b) &&
+                                 a.label == b.label && _same_meta(a.meta, b.meta)
+
+"""
+    same_system(a, pa, b, pb) -> Bool
+
+Whether the systems `a` of the project `pa` and `b` of `pb` are the same: id, label, `static`, and
+members and sources (compared by their machine ids).
+"""
+same_system(a::SystemEntry, pa::Project, b::SystemEntry, pb::Project) =
+    a.name == b.name && a.label == b.label && a.static == b.static &&
+    _keys(pa, a.members) == _keys(pb, b.members) && _keys(pa, a.sources) == _keys(pb, b.sources)
+
+"""A new machine id: a UUID (version 4) as a string."""
+new_uid() = string(uuid4())
+
+"""
+    match_entries(olds, news) -> (; pairs, added, removed)
+
+Pairs the entries (or systems) of two states like [`diff_projects`](@ref): by `uid`, then the
+remaining ones without a uid in `olds` by their readable id. `pairs` are the `(old, new)` tuples,
+`added` the unpaired ones of `news`, `removed` those of `olds`.
+"""
+function match_entries(olds::Vector{T}, news::Vector{T}) where {T}
+    pairs, added, removed = _pair(olds, news)
+    return (; pairs, added, removed)
 end

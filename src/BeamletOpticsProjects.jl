@@ -22,7 +22,7 @@ export Project, Entry, SystemEntry, new_project, load_project, save_project, sys
        project_file, project_marker, project_dir, project_stamp, ProjectChanged, apply_pose!,
        rotation_matrix, @component, @source, @system, id_prefix, next_id, diff_projects,
        EntryChange, SystemChange, copy_code
-public project_name, module_name, normalize_code, EXTENSION
+public project_name, module_name, normalize_code, EXTENSION, same_entry, same_system, new_uid, match_entries
 
 """Version of the format of `system.jl`, written to `[beamletoptics] format` of `Project.toml`."""
 const FORMAT = 1

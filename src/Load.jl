@@ -24,7 +24,10 @@ function load_project(path::AbstractString)
     p = Project(path, name; stamp)
     p.mod = mod
     task_local_storage(_LOADING, p) do
-        Base.include(mod, file)
+        task_local_storage(_WHERE, String[]) do
+            Base.include(mod, file)
+            _build_systems!(p, task_local_storage(_WHERE))
+        end
     end
     return p
 end

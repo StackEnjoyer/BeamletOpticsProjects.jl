@@ -110,6 +110,13 @@ _agents_template(name) = """
     - `@system`: members are components; a component may be in several systems, a source in at most
       one. `static = true` makes a `StaticSystem`.
 
+    ## Working while the GUI is open
+
+    The GUI may have the project open. It reloads `system.jl` and `src/` when they change, and it never
+    overwrites them silently: if both changed, it asks the person. So write `system.jl` in one go (not
+    line by line over minutes), and if a save of yours fails with `ProjectChanged`, load the project
+    again instead of forcing it.
+
     ## Check
 
     ```julia

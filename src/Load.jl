@@ -18,8 +18,10 @@ function load_project(path::AbstractString)
     file = joinpath(path, "system.jl")
     isfile(file) || throw(ArgumentError("no system.jl in \"$path\""))
     name = project_name(path)
+    # Before reading: a change while loading makes the stamp differ
+    stamp = project_stamp(path)
     mod = _project_module(path, name)
-    p = Project(path, name)
+    p = Project(path, name; stamp)
     p.mod = mod
     task_local_storage(_LOADING, p) do
         Base.include(mod, file)

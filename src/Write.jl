@@ -93,14 +93,21 @@ function euler_angles(R::AbstractMatrix)
 end
 
 """
-    save_project(project; packages = Module[]) -> String
-    save_project(project, path; packages = Module[]) -> String
+    save_project(project; packages = Module[], force = false) -> String
+    save_project(project, path; packages = Module[], force = false) -> String
 
 Writes `system.jl` of `project` (in the folder `path`, which becomes the folder of the project)
 and returns its path. A folder that is not a project yet gets the files of [`new_project`](@ref),
 whose `Project.toml` records the versions of BeamletOptics, BeamletOpticsProjects and `packages`.
+
+Throws [`ProjectChanged`](@ref) and writes nothing if the files changed since the project was
+loaded or saved (its `stamp`, see [`project_stamp`](@ref)), unless `force` is `true`. Afterwards
+the `stamp` of `project` is that of the written files. Saving to another folder (`path`) does not
+check.
 """
-function save_project(p::Project; packages::Vector{Module} = Module[])
+function save_project(p::Project; packages::Vector{Module} = Module[], force::Bool = false)
+    force || isnothing(p.stamp) || !isfile(project_file(p, "system.jl")) ||
+        project_stamp(p.path) == p.stamp || throw(ProjectChanged(p.path))
     mkpath(p.path)
     isfile(project_file(p, "Project.toml")) || _scaffold(p.path, p.name, packages)
     # A project of the time before project files
@@ -108,12 +115,18 @@ function save_project(p::Project; packages::Vector{Module} = Module[])
     isfile(marker) || write(marker, _marker_text(splitext(basename(marker))[1]))
     file = project_file(p, "system.jl")
     _write_atomic(file, system_code(p))
+    p.stamp = project_stamp(p.path)
     return file
 end
 
-function save_project(p::Project, path::AbstractString; packages::Vector{Module} = Module[])
-    p.path = abspath(path)
-    return save_project(p; packages)
+function save_project(p::Project, path::AbstractString; packages::Vector{Module} = Module[],
+        force::Bool = false)
+    path = abspath(path)
+    if path != p.path
+        p.path = path
+        p.stamp = nothing
+    end
+    return save_project(p; packages, force)
 end
 
 """Writes `text` to a temporary file next to `file` and then moves it there."""

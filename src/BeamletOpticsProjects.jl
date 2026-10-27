@@ -12,14 +12,15 @@ module BeamletOpticsProjects
 
 using BeamletOptics
 using LinearAlgebra
+using SHA
 using TOML
 using UUIDs
 
 const BMO = BeamletOptics
 
 export Project, Entry, SystemEntry, new_project, load_project, save_project, system_code,
-       project_file, project_marker, project_dir, apply_pose!, rotation_matrix, @component,
-       @source, @system
+       project_file, project_marker, project_dir, project_stamp, ProjectChanged, apply_pose!,
+       rotation_matrix, @component, @source, @system
 public project_name, module_name, normalize_code, EXTENSION
 
 """Version of the format of `system.jl`, written to `[beamletoptics] format` of `Project.toml`."""
@@ -82,8 +83,10 @@ SystemEntry(name, members, sources = Symbol[]; static::Bool = false, object = no
     Project(path, name; entries = Entry[], systems = SystemEntry[])
 
 A project in the folder `path` with the module name `name` (of `src/<name>.jl`), its `entries`
-(`@component` and `@source` in file order), its `systems` and the module `mod` that `system.jl`
-ran in (`nothing` for a project built in memory).
+(`@component` and `@source` in file order), its `systems`, the module `mod` that `system.jl`
+ran in (`nothing` for a project built in memory) and the `stamp` of its files when it was loaded
+or saved (see [`project_stamp`](@ref), `nothing` for a project built in memory), against which
+[`save_project`](@ref) checks that nobody else changed them meanwhile.
 """
 mutable struct Project
     path::String
@@ -91,11 +94,13 @@ mutable struct Project
     entries::Vector{Entry}
     systems::Vector{SystemEntry}
     mod::Union{Nothing, Module}
+    stamp::Union{Nothing, String}
 end
 
-Project(path::AbstractString, name::AbstractString; entries = Entry[], systems = SystemEntry[]) =
+Project(path::AbstractString, name::AbstractString; entries = Entry[], systems = SystemEntry[],
+    stamp = nothing) =
     Project(abspath(path), String(name), collect(Entry, entries), collect(SystemEntry, systems),
-        nothing)
+        nothing, stamp)
 
 """
     project[name]
@@ -125,6 +130,7 @@ function Base.show(io::IO, p::Project)
         length(p.systems), " systems)")
 end
 
+include("Stamp.jl")
 include("Pose.jl")
 include("Macros.jl")
 include("Load.jl")

@@ -158,10 +158,21 @@ function _give_uids!(p::Project)
     return p
 end
 
-"""Writes `text` to a temporary file next to `file` and then moves it there."""
-function _write_atomic(file, text)
+"""
+Writes `text` to a temporary file next to `file` and then moves it there. A move that fails with
+an `IOError` or `SystemError` (a sharing violation of a network drive) is tried again, up to
+`tries` times `wait` seconds apart; then the error is thrown. `move` is the function that moves.
+"""
+function _write_atomic(file, text; move = mv, tries::Int = 10, wait::Real = 0.05)
     tmp = file * ".tmp"
     write(tmp, text)
-    mv(tmp, file; force = true)
-    return file
+    for attempt in 1:tries
+        try
+            move(tmp, file; force = true)
+            return file
+        catch e
+            (e isa Base.IOError || e isa SystemError) && attempt < tries || rethrow()
+            sleep(wait)
+        end
+    end
 end

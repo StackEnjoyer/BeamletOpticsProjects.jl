@@ -18,6 +18,18 @@ using Test
     @test project_stamp(dir) != s2
 end
 
+@testset "project_stamp ignores dotfiles in src" begin
+    dir = mktempdir()
+    new_project(dir; name = "Bench")
+    s = project_stamp(dir)
+    write(joinpath(dir, "src", "._Bench.jl"), "garbage\0")
+    mkpath(joinpath(dir, "src", ".hidden"))
+    write(joinpath(dir, "src", ".hidden", "X.jl"), "f() = 1\n")
+    @test project_stamp(dir) == s
+    write(joinpath(dir, "src", "Extra.jl"), "f() = 1\n")
+    @test project_stamp(dir) != s
+end
+
 @testset "save_project checks the stamp" begin
     dir = mktempdir()
     new_project(dir; name = "Bench")

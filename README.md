@@ -25,7 +25,7 @@ Bench/
 ├── Project.toml        the exact versions of BeamletOptics and its packages
 ├── view.toml           how the GUI shows it (camera, layout)
 ├── AGENTS.md           instructions for coding agents (CLAUDE.md points to it)
-└── .bmo/               written by the open GUI, e.g. session.md (not versioned)
+└── .bmo/               written by the open GUI, e.g. session-<person>.md (not versioned)
 ```
 
 `system.jl` is plain Julia, readable and writable by people and agents:

@@ -40,6 +40,20 @@ using Test
     @test_throws ArgumentError new_project(joinpath(mktempdir(), "x"); name = "not valid")
 end
 
+@testset "AGENTS.md: taking part" begin
+    dir = mktempdir()
+    new_project(dir; name = "Example")
+    agents = read(joinpath(dir, "AGENTS.md"), String)
+    section = match(r"## Taking part\n(.*?)\n## "s, agents).captures[1]
+    for key in ("presence-<your name>@agent.toml", "kind = \"agent\"", "beat", "ttl = 600",
+                "selected_id", "doing", "session-<your name>@agent.md", "delete it")
+        @test occursin(key, section)
+    end
+    # the earlier "do not edit" rules make an exception for the agent's own files
+    @test occursin(r"Do not edit it, except your own files"s, agents)
+    @test occursin(r"do not\s+edit them \(your own `\*@agent` files are the exception"s, agents)
+end
+
 @testset "AGENTS.md example loads" begin
     dir = mktempdir()
     new_project(dir; name = "Example")

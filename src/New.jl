@@ -13,8 +13,8 @@ Creates an empty project in the folder `path`:
 - `src/<name>.jl` with the module `<name>` for own code;
 - `system.jl` without entries;
 - `AGENTS.md` and `CLAUDE.md` with the instructions for agents, `.gitignore` and
-  `.claude/settings.json`, whose hook shows `.bmo/session.md` (the selection and the recent
-  actions in the open GUI) to Claude Code with every prompt when Claude Code is started in the
+  `.claude/settings.json`, whose hook shows `.bmo/session*.md` (the selection and the recent
+  actions in every open GUI window) to Claude Code with every prompt when Claude Code is started in the
   project folder;
 - the project file `<folder name>.bmo`, by which people open it, see [`project_marker`](@ref).
 
@@ -50,8 +50,8 @@ function _first_version(path)
     return nothing
 end
 
-"""The command of the hook of Claude Code that shows `.bmo/session.md` with every prompt."""
-const _SESSION_HOOK = raw"""cat "$CLAUDE_PROJECT_DIR/.bmo/session.md" 2>/dev/null || true"""
+"""The command of the hook of Claude Code that shows every `.bmo/session*.md` with every prompt."""
+const _SESSION_HOOK = raw"""cat "$CLAUDE_PROJECT_DIR"/.bmo/session*.md 2>/dev/null || true"""
 
 _claude_settings() = """
     {
@@ -132,7 +132,7 @@ _agents_template(name) = """
     - `view.toml`: view state of the GUI (camera, colors, clip planes). Do not edit it.
     - `*.bmo`: the project file that people open; it only marks the folder. Do not edit it.
     - `Project.toml`: the versions this project was made with (`[compat]`).
-    - `.bmo/`: written by the open GUI (`session.md`); not part of the versions. Do not edit it.
+    - `.bmo/`: written by the open GUI (`session-<person>.md`, `presence-*.toml`, `view-*.toml`); not part of the versions. Do not edit it, except your own files (see "Taking part").
 
     ## The form of `system.jl`
 
@@ -159,21 +159,34 @@ _agents_template(name) = """
     - `@system`: members are components; a component may be in several systems, a source in at most
       one. `static = true` makes a `StaticSystem`.
 
-    ## The open window
+    ## The open windows
 
-    The GUI may have the project open while you work on it.
+    Several people may have the project open in their own windows while you work on it.
 
     - The window saves every finished action of the person to `system.jl` within about a second, so
       `system.jl` is what the person sees. It reloads `system.jl` and `src/` when you change them, and
       it never overwrites your changes silently: if both changed the same line, it asks the person.
-    - `.bmo/session.md` lists the selection and the recent actions of the person in the window. If
-      Claude Code was started in this folder, its hook shows the file with every prompt; otherwise
-      read it when the person refers to "this" or "what I just did".
+    - Each window writes `.bmo/session-<person>.md`: the selection and the recent actions of its
+      person. If Claude Code was started in this folder, its hook shows all of them with every
+      prompt; otherwise read `.bmo/session*.md` when a person refers to "this" or "what I just did".
+      The other files in `.bmo/` (`presence-*.toml`, `view-*.toml`) belong to the windows; do not
+      edit them (your own `*@agent` files are the exception, see "Taking part").
     - Edit single lines of `system.jl`. Never rewrite the whole file from an older read: it would undo
       what the person did meanwhile. Read the file again after any failed edit.
     - If a save of yours fails with `ProjectChanged`, load the project again instead of forcing it.
     - Versions are the person's: `Ctrl+S` in the window saves one (`git log -- system.jl` shows them).
       Do not commit unless the person asks.
+
+    ## Taking part
+
+    The windows of the people show you too, at the object you work on.
+
+    - Before you change the project, write `.bmo/presence-<your name>@agent.toml` (e.g.
+      `claude@agent`), a TOML with `name` (how people see you, e.g. "Claude (Opus 5.5)"),
+      `kind = "agent"`, `beat` (an integer; increase it by one at every write), `ttl = 600`,
+      `selected_id` (the id of the line you work on, `""` if none) and `doing` (a few words).
+    - Write it again when you go to another object; delete it when you are done.
+    - Optionally `.bmo/session-<your name>@agent.md`: a few lines of what you do, for other agents.
 
     ## Check
 

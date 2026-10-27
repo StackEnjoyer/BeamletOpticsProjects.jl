@@ -8,7 +8,8 @@ the same time
 
 A fingerprint of the files of the project in the folder `dir` that define the setup: `system.jl`
 and every `.jl` file in `src/`, with their paths. It changes with any change of their content; the
-GUI's own files (`view.toml`) do not count.
+GUI's own files (`view.toml`) do not count, nor do files and folders in `src/` whose name starts
+with `.` (e.g. the `._X.jl` that macOS leaves on network drives).
 """
 function project_stamp(dir::AbstractString)
     dir = abspath(dir)
@@ -16,8 +17,12 @@ function project_stamp(dir::AbstractString)
     isfile(joinpath(dir, "system.jl")) && push!(files, "system.jl")
     src = joinpath(dir, "src")
     if isdir(src)
-        for (root, _, names) in walkdir(src), f in names
-            endswith(f, ".jl") && push!(files, relpath(joinpath(root, f), dir))
+        for (root, dirs, names) in walkdir(src)
+            filter!(d -> !startswith(d, '.'), dirs)
+            for f in names
+                startswith(f, '.') && continue
+                endswith(f, ".jl") && push!(files, relpath(joinpath(root, f), dir))
+            end
         end
     end
     ctx = SHA.SHA1_CTX()

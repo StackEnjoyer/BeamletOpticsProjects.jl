@@ -35,14 +35,16 @@ function save_version(dir::AbstractString; message::Union{Nothing, AbstractStrin
             "; commit or unstage them first"))
         msg = isnothing(message) ? version_summary(dir) : String(message)
         spec = _pathspec(rel, "*")
-        tree = LibGit2.with(LibGit2.GitIndex, repo) do idx
-            LibGit2.add!(idx, spec)
-            LibGit2.update!(idx, spec)
-            # The state of the open window (`.bmo/`) is never a part of a version, also in a
-            # project whose `.gitignore` does not name it
-            LibGit2.remove!(idx, _pathspec(rel, ".bmo/*"))
-            LibGit2.write!(idx)
-            LibGit2.write_tree!(idx)
+        tree = _retry_locked(repo) do
+            LibGit2.with(LibGit2.GitIndex, repo) do idx
+                LibGit2.add!(idx, spec)
+                LibGit2.update!(idx, spec)
+                # The state of the open window (`.bmo/`) is never a part of a version, also in a
+                # project whose `.gitignore` does not name it
+                LibGit2.remove!(idx, _pathspec(rel, ".bmo/*"))
+                LibGit2.write!(idx)
+                LibGit2.write_tree!(idx)
+            end
         end
         head = _head(repo)
         if isnothing(head)
@@ -61,6 +63,26 @@ function save_version(dir::AbstractString; message::Union{Nothing, AbstractStrin
     finally
         close(repo)
     end
+end
+
+"""
+Runs `f()` while the index of `repo` is not locked (`index.lock`, e.g. by a save of another person
+on a shared drive), trying again up to `tries` times `wait` seconds apart, also when libgit2
+reports the lock; then throws an `ArgumentError`.
+"""
+function _retry_locked(f, repo; tries::Int = 10, wait::Real = 0.1)
+    lock = joinpath(LibGit2.gitdir(repo), "index.lock")
+    for attempt in 1:tries
+        if !ispath(lock)
+            try
+                return f()
+            catch e
+                (e isa LibGit2.GitError && occursin("lock", lowercase(e.msg))) || rethrow()
+            end
+        end
+        attempt < tries && sleep(wait)
+    end
+    throw(ArgumentError("the repository is locked by another save"))
 end
 
 """

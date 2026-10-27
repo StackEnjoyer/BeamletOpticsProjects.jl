@@ -199,7 +199,8 @@ end
     cmd = replace(cmd, "\\\"" => "\"")
     @test cmd == P._SESSION_HOOK
     agents = read(joinpath(dir, "AGENTS.md"), String)
-    @test occursin("## The open window", agents) && occursin(".bmo/session.md", agents)
+    @test occursin("## The open windows", agents) && occursin(".bmo/session-<person>.md", agents) &&
+occursin(".bmo/session*.md", agents)
     bash = Sys.which("bash")
     if isnothing(bash)
         @info "No bash: the hook is not run"
@@ -208,8 +209,13 @@ end
             String)
         @test run_hook() == ""
         mkpath(joinpath(dir, ".bmo"))
-        write(joinpath(dir, ".bmo", "session.md"), "# Window\nSelected: L1\n")
+        write(joinpath(dir, ".bmo", "session-a@pc.md"), "# Window\nSelected: L1\n")
         @test run_hook() == "# Window\nSelected: L1\n"
+        write(joinpath(dir, ".bmo", "session-b@pc.md"), "# Window 2\n")
+        @test run_hook() == "# Window\nSelected: L1\n# Window 2\n"
+        # Files that are no sessions are not shown
+        write(joinpath(dir, ".bmo", "presence-a@pc.toml"), "beat = 1\n")
+        @test run_hook() == "# Window\nSelected: L1\n# Window 2\n"
     end
     # save_project of an existing project writes no scaffold files (D3b)
     old = joinpath(mktempdir(), "Old")
@@ -232,7 +238,46 @@ end
     @test isfile(joinpath(other, ".claude", "settings.json"))
     @test [v.message for v in versions(other)] == ["New project"]
     # The hook only runs if Claude Code was started in the project folder
-    @test occursin("If\n  Claude Code was started in this folder", agents)
+    @test occursin("If Claude Code was started in this folder", replace(agents, r"\s+" => " "))
+end
+
+@testset "a locked repository" begin
+    dir = joinpath(mktempdir(), "Locked")
+    new_project(dir)
+    write(joinpath(dir, "src", "Extra.jl"), "f() = 1\n")
+    lock = joinpath(dir, ".git", "index.lock")
+    write(lock, "")
+    # The lock is released meanwhile: the save succeeds
+    t = @async (sleep(0.3); rm(lock))
+    @test save_version(dir) isa String
+    wait(t)
+    # The lock stays: ArgumentError after the retries
+    write(joinpath(dir, "src", "Extra.jl"), "f() = 2\n")
+    write(lock, "")
+    err = try
+        save_version(dir)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ArgumentError && occursin("locked by another save", err.msg)
+    rm(lock)
+    @test save_version(dir) isa String
+    # The lock is seen before f runs: f is never called
+    write(lock, "")
+    calls = 0
+    repo = LibGit2.GitRepo(dir)
+    err = try
+        BeamletOpticsProjects._retry_locked(() -> (calls += 1), repo; tries = 3, wait = 0.01)
+        nothing
+    catch e
+        e
+    finally
+        close(repo)
+    end
+    rm(lock)
+    @test calls == 0
+    @test err isa ArgumentError
 end
 
 @testset "a project in a worktree or submodule" begin

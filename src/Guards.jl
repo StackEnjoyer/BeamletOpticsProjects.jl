@@ -101,7 +101,7 @@ function _foreign_hits(p::Project, base::Project)
     basekeys = Set(_match_key(s) for s in base.systems)
     # the objects of p that belong to a system of base
     old = Set{Symbol}()
-    for s in base.systems, id in s.members
+    for s in base.systems, id in _leaf_names(base, s.members)
         i = findfirst(e -> e.name === id, base.entries)
         isnothing(i) && continue
         k = _match_key(base.entries[i])

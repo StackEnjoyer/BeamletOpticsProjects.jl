@@ -21,13 +21,13 @@ using UUIDs
 
 const BMO = BeamletOptics
 
-export Project, Entry, SystemEntry, new_project, load_project, save_project, system_code,
+export Project, Entry, SystemEntry, GroupEntry, new_project, load_project, save_project, system_code,
        project_file, project_marker, project_dir, project_stamp, ProjectChanged, apply_pose!,
-       rotation_matrix, @component, @source, @system, id_prefix, next_id, diff_projects,
-       EntryChange, SystemChange, copy_code, save_version, version_summary, versions, trace, look,
+       rotation_matrix, @component, @source, @system, @group, id_prefix, next_id, diff_projects,
+       EntryChange, SystemChange, GroupChange, copy_code, save_version, version_summary, versions, trace, look,
        announce, leave, fork_team, teams, post!, board, claim!, release!, wait_for, merge_draft!,
        evaluate
-public project_name, module_name, normalize_code, EXTENSION, same_entry, same_system, new_uid, match_entries,
+public project_name, module_name, normalize_code, EXTENSION, same_entry, same_system, same_group, new_uid, match_entries,
        install_agent_skill, person, presence_file, session_file, write_presence, read_presences, alive,
        merge_plan
 
@@ -102,27 +102,57 @@ SystemEntry(name, members, sources = Symbol[]; static::Bool = false, object = no
         _string_or_nothing(label), _string_or_nothing(uid))
 
 """
-    Project(path, name; entries = Entry[], systems = SystemEntry[])
+    GroupEntry(name, members; pos, rot = nothing, object = nothing, label = nothing, uid = nothing)
+
+One `@group` of a project, a `BeamletOptics.ObjectGroup`: its readable id `name` (e.g. `G1`), the
+ids of its `members` (entries of `@component` or other groups, in the order of the group's
+objects), its pivot `pos` (absolute position in m) and orientation `rot` (as for an [`Entry`](@ref),
+`nothing` = the identity), the built group `object`, its `label` and machine id `uid`.
+
+The members keep their own lines with their absolute poses; building the group moves none of them.
+An entry or group is a member of at most one group, and an entry inside a group is in systems only
+through its outermost group, which the systems list, see [`@group`](@ref).
+"""
+struct GroupEntry
+    name::Symbol
+    members::Vector{Symbol}
+    pos::NTuple{3, Float64}
+    rot::Union{Nothing, NTuple{3, Float64}, Matrix{Float64}}
+    object::Any
+    label::Union{Nothing, String}
+    uid::Union{Nothing, String}
+end
+
+function GroupEntry(name, members; pos, rot = nothing, object = nothing, label = nothing, uid = nothing)
+    rot = rot === nothing ? nothing :
+          rot isa AbstractMatrix ? Matrix{Float64}(rot) : NTuple{3, Float64}(Tuple(rot))
+    return GroupEntry(Symbol(name), Symbol.(collect(members)), NTuple{3, Float64}(Tuple(pos)), rot,
+        object, _string_or_nothing(label), _string_or_nothing(uid))
+end
+
+"""
+    Project(path, name; entries = Entry[], systems = SystemEntry[], groups = GroupEntry[])
 
 A project in the folder `path` with the module name `name` (of `src/<name>.jl`), its `entries`
-(`@component` and `@source` in file order), its `systems`, the module `mod` that `system.jl`
-ran in (`nothing` for a project built in memory) and the `stamp` of its files when it was loaded
-or saved (see [`project_stamp`](@ref), `nothing` for a project built in memory), against which
-[`save_project`](@ref) checks that nobody else changed them meanwhile.
+(`@component` and `@source` in file order), its `systems`, its `groups`, the module `mod` that
+`system.jl` ran in (`nothing` for a project built in memory) and the `stamp` of its files when it
+was loaded or saved (see [`project_stamp`](@ref), `nothing` for a project built in memory), against
+which [`save_project`](@ref) checks that nobody else changed them meanwhile.
 """
 mutable struct Project
     path::String
     name::String
     entries::Vector{Entry}
     systems::Vector{SystemEntry}
+    groups::Vector{GroupEntry}
     mod::Union{Nothing, Module}
     stamp::Union{Nothing, String}
 end
 
 Project(path::AbstractString, name::AbstractString; entries = Entry[], systems = SystemEntry[],
-    stamp = nothing) =
+    groups = GroupEntry[], stamp = nothing) =
     Project(abspath(path), String(name), collect(Entry, entries), collect(SystemEntry, systems),
-        nothing, stamp)
+        collect(GroupEntry, groups), nothing, stamp)
 
 """
     project[name]
@@ -137,6 +167,9 @@ function Base.getindex(p::Project, name::Union{Symbol, AbstractString})
     for s in p.systems
         s.name === n && return s.object
     end
+    for g in p.groups
+        g.name === n && return g.object
+    end
     throw(KeyError(n))
 end
 
@@ -149,7 +182,7 @@ project_file(p::Project, file::AbstractString) = joinpath(p.path, file)
 
 function Base.show(io::IO, p::Project)
     print(io, "Project(\"", p.name, "\" at ", repr(p.path), ", ", length(p.entries), " entries, ",
-        length(p.systems), " systems)")
+        length(p.systems), " systems", isempty(p.groups) ? "" : ", $(length(p.groups)) groups", ")")
 end
 
 include("Stamp.jl")

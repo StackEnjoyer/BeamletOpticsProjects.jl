@@ -5,10 +5,10 @@ Writing system.jl: the same project always gives the same text
 """
     system_code(project) -> String
 
-The text of `system.jl` of `project`: a header, then one line per `@component`, `@source` and
-`@system`, in this order and in the order of the entries. Numbers are written exactly and as short
-as possible; a rotation given as a matrix is written as angles in degrees if it can be, see
-[`rotation_matrix`](@ref).
+The text of `system.jl` of `project`: a header, then one line per `@component`, `@source`,
+`@group` and `@system`, in this order and in the order of the entries (groups inner first).
+Numbers are written exactly and as short as possible; a rotation given as a matrix is written as
+angles in degrees if it can be, see [`rotation_matrix`](@ref).
 """
 function system_code(p::Project)
     io = IOBuffer()
@@ -17,6 +17,9 @@ function system_code(p::Project)
         for e in p.entries
             e.kind === kind && println(io, _entry_line(e))
         end
+    end
+    for g in _inner_first(p.groups)
+        println(io, _group_line(g))
     end
     for s in p.systems
         println(io, _system_line(s))
@@ -50,6 +53,40 @@ function _system_line(s::SystemEntry)
     s.static && print(io, " static = true")
     _print_ids(io, s)
     return String(take!(io))
+end
+
+function _group_line(g::GroupEntry)
+    bad = _nonfinite(g.pos, g.rot)
+    isnothing(bad) ||
+        throw(ArgumentError("$bad of `$(g.name)` is not finite, the project is not written"))
+    io = IOBuffer()
+    print(io, "@group ", g.name, " = [", join(g.members, ", "), "] pos = ", _tuple_string(g.pos))
+    r = _rot_string(g.rot)
+    r === nothing || print(io, " rot = ", r)
+    _print_ids(io, g)
+    return String(take!(io))
+end
+
+"""
+The `groups` in their order, but each group after the groups among its members, so that a file
+lists the inner groups first. A cycle is written in the order it has.
+"""
+function _inner_first(groups::Vector{GroupEntry})
+    index = Dict(g.name => i for (i, g) in enumerate(groups))
+    done = falses(length(groups))
+    order = GroupEntry[]
+    function visit(i)
+        done[i] && return nothing
+        done[i] = true
+        for m in groups[i].members
+            j = get(index, m, 0)
+            j == 0 || visit(j)
+        end
+        push!(order, groups[i])
+        return nothing
+    end
+    foreach(visit, eachindex(groups))
+    return order
 end
 
 # The label (if any) and the machine id (if any) at the end of a line
@@ -149,7 +186,7 @@ function save_project(p::Project, path::AbstractString; packages::Vector{Module}
     return save_project(p; packages, force)
 end
 
-"""Gives every entry and system of `p` without a machine id a new one (a UUID)."""
+"""Gives every entry, system and group of `p` without a machine id a new one (a UUID)."""
 function _give_uids!(p::Project)
     for (i, e) in enumerate(p.entries)
         isnothing(e.uid) || continue
@@ -160,6 +197,10 @@ function _give_uids!(p::Project)
         isnothing(s.uid) || continue
         p.systems[i] = SystemEntry(s.name, s.members, s.sources, s.static, s.object, s.label,
             string(uuid4()))
+    end
+    for (i, g) in enumerate(p.groups)
+        isnothing(g.uid) || continue
+        p.groups[i] = GroupEntry(g.name, g.members, g.pos, g.rot, g.object, g.label, string(uuid4()))
     end
     return p
 end

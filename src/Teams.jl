@@ -268,27 +268,43 @@ function _team_keys(base_xs, xs)
     return keys
 end
 
-# The keys of the readable ids `names` of the project `p`, whose entries have the keys `keys`
-_names_to_keys(p, keys, names) =
-    String[keys[i] for n in names for i in (findfirst(e -> e.name === n, p.entries),) if !isnothing(i)]
+# The keys of the readable ids `names` of the project `p`, whose entries have the keys `keys` and
+# whose groups have the keys `gkeys`
+function _names_to_keys(p, keys, names, gkeys = String[])
+    out = String[]
+    for n in names
+        i = findfirst(e -> e.name === n, p.entries)
+        if !isnothing(i)
+            push!(out, keys[i])
+            continue
+        end
+        j = findfirst(g -> g.name === n, p.groups)
+        isnothing(j) || j > length(gkeys) || push!(out, gkeys[j])
+    end
+    return out
+end
 
-# An entry or a system under another readable id
+# An entry, a system or a group under another readable id
 _with_name(e::Entry, name) = Entry(e.kind, name, e.code, e.object, e.pos, e.rot, e.pose0, e.meta,
     e.label, e.uid)
 _with_name(s::SystemEntry, name) = SystemEntry(name, s.members, s.sources, s.static, s.object,
     s.label, s.uid)
+_with_name(g::GroupEntry, name) = GroupEntry(name, g.members, g.pos, g.rot, g.object, g.label, g.uid)
 
 """
 Makes the project `live` as `draft` for the keys of `plan` (see [`merge_plan`](@ref) of `base`,
-`live` and `draft`): takes the entries and systems of `take` from `draft` (removed, added or
-changed, under the id of `renames`), the members and sources of the systems of `merged`, and refers
-to the entries by their final readable ids. Members of a system that are gone are left out. Returns
-the keys of the entries and of the systems of `live` afterwards, `(; entries, systems)`.
+`live` and `draft`): takes the entries, systems and groups of `take` from `draft` (removed, added or
+changed, under the id of `renames`), the members and sources of the systems and groups of `merged`,
+and refers to the entries and groups by their final readable ids. Members that are gone are left
+out. Returns the keys of the entries, systems and groups of `live` afterwards,
+`(; entries, systems, groups)`.
 """
 function _apply_plan!(live::Project, base::Project, draft::Project, plan)
     take = plan.take
     dkeys = _team_keys(base.entries, draft.entries)
     lkeys = _team_keys(base.entries, live.entries)
+    dgkeys = _team_keys(base.groups, draft.groups)
+    lgkeys = _team_keys(base.groups, live.groups)
     # (key, own key of the entry in its file, entry): a system may name it by either
     ents = Tuple{String, String, Entry}[(lkeys[i], _merge_key(e), e) for (i, e) in enumerate(live.entries)]
     for k in take
@@ -311,10 +327,10 @@ function _apply_plan!(live::Project, base::Project, draft::Project, plan)
     order(set, lists...) = (seen = unique(vcat(lists...));
                             vcat(filter(in(set), seen), setdiff(collect(set), seen)))
     from_draft(k, ds) = (k, _with_name(ds, get(plan.renames, k, ds.name)),
-        _names_to_keys(draft, dkeys, ds.members), _names_to_keys(draft, dkeys, ds.sources))
+        _names_to_keys(draft, dkeys, ds.members, dgkeys), _names_to_keys(draft, dkeys, ds.sources))
     for (i, s) in enumerate(live.systems)
         k = lskeys[i]
-        lm, ls = _names_to_keys(live, lkeys, s.members), _names_to_keys(live, lkeys, s.sources)
+        lm, ls = _names_to_keys(live, lkeys, s.members, lgkeys), _names_to_keys(live, lkeys, s.sources)
         j = findfirst(==(k), dskeys)
         if haskey(plan.merged, k)
             m = plan.merged[k]
@@ -330,35 +346,66 @@ function _apply_plan!(live::Project, base::Project, draft::Project, plan)
         k = dskeys[j]
         k in take && !(k in lskeys) && push!(syss, from_draft(k, ds))
     end
+    # The groups with their keys, the own key of the group in its file and the keys of their members
+    grps = Tuple{String, String, GroupEntry, Vector{String}}[]
+    group_from_draft(k, dg) = (k, _merge_key(dg), _with_name(dg, get(plan.renames, k, dg.name)),
+        _names_to_keys(draft, dkeys, dg.members, dgkeys))
+    for (i, g) in enumerate(live.groups)
+        k = lgkeys[i]
+        lm = _names_to_keys(live, lkeys, g.members, lgkeys)
+        j = findfirst(==(k), dgkeys)
+        if haskey(plan.merged, k)
+            dm = isnothing(j) ? String[] : last(group_from_draft(k, draft.groups[j]))
+            push!(grps, (k, _merge_key(g), g, order(plan.merged[k].members, lm, dm)))
+        elseif k in take
+            isnothing(j) || push!(grps, group_from_draft(k, draft.groups[j]))
+        else
+            push!(grps, (k, _merge_key(g), g, lm))
+        end
+    end
+    for (j, dg) in enumerate(draft.groups)
+        k = dgkeys[j]
+        k in take && !(k in lgkeys) && push!(grps, group_from_draft(k, dg))
+    end
     function id_of(key)
         i = something(findfirst(x -> x[1] == key, ents), findfirst(x -> x[2] == key, ents), 0)
-        return i == 0 ? nothing : ents[i][3].name
+        i == 0 || return ents[i][3].name
+        j = something(findfirst(x -> x[1] == key, grps), findfirst(x -> x[2] == key, grps), 0)
+        return j == 0 ? nothing : grps[j][3].name
     end
     ids(keys) = Symbol[n for n in map(id_of, keys) if !isnothing(n)]
     live.entries = Entry[x[3] for x in ents]
     live.systems = SystemEntry[SystemEntry(s.name, ids(m), ids(src), s.static, nothing, s.label, s.uid)
                                for (_, s, m, src) in syss]
-    return (; entries = String[x[1] for x in ents], systems = String[x[1] for x in syss])
+    live.groups = GroupEntry[GroupEntry(g.name, ids(m), g.pos, g.rot, nothing, g.label, g.uid)
+                             for (_, _, g, m) in grps]
+    return (; entries = String[x[1] for x in ents], systems = String[x[1] for x in syss],
+        groups = String[x[1] for x in grps])
 end
 
 """
-Gives the entries and systems of the project `p` (a state that changed from `base`) the readable
-ids of `renames` (key => id, see [`merge_plan`](@ref)), also where its systems name them.
+Gives the entries, systems and groups of the project `p` (a state that changed from `base`) the
+readable ids of `renames` (key => id, see [`merge_plan`](@ref)), also where its systems and groups
+name them.
 """
 function _rename!(p::Project, base::Project, renames)
     ekeys = _team_keys(base.entries, p.entries)
     skeys = _team_keys(base.systems, p.systems)
+    gkeys = _team_keys(base.groups, p.groups)
     new = Dict{Symbol, Symbol}()
-    for (i, e) in enumerate(p.entries)
-        id = get(renames, ekeys[i], nothing)
+    for (xs, keys) in ((p.entries, ekeys), (p.groups, gkeys)), (i, x) in enumerate(xs)
+        id = get(renames, keys[i], nothing)
         isnothing(id) && continue
-        new[e.name] = id
-        p.entries[i] = _with_name(e, id)
+        new[x.name] = id
+        xs[i] = _with_name(x, id)
     end
     ref(n) = get(new, n, n)
     for (i, s) in enumerate(p.systems)
         p.systems[i] = SystemEntry(get(renames, skeys[i], s.name), map(ref, s.members),
             map(ref, s.sources), s.static, s.object, s.label, s.uid)
+    end
+    for (i, g) in enumerate(p.groups)
+        p.groups[i] = GroupEntry(g.name, map(ref, g.members), g.pos, g.rot, g.object, g.label, g.uid)
     end
     return p
 end
@@ -420,11 +467,12 @@ function _write_code(dir, files)
     return nothing
 end
 
-# An entry or a system with the machine id `uid`
+# An entry, a system or a group with the machine id `uid`
 _with_uid(e::Entry, uid) = Entry(e.kind, e.name, e.code, e.object, e.pos, e.rot, e.pose0, e.meta,
     e.label, uid)
 _with_uid(s::SystemEntry, uid) = SystemEntry(s.name, s.members, s.sources, s.static, s.object,
     s.label, uid)
+_with_uid(g::GroupEntry, uid) = GroupEntry(g.name, g.members, g.pos, g.rot, g.object, g.label, uid)
 
 """
 Gives the team draft in the folder `draft` (the state `theirs`, unless it was written since) the
@@ -436,17 +484,18 @@ the `base/` of the draft. Writes `system.jl` of the draft only if that changes i
 function _rebase_draft!(draft, base::Project, live::Project, theirs::Project, plan, done)
     d = project_stamp(draft) == theirs.stamp ? theirs : load_project(draft)
     uids = Dict{String, String}()
-    for (keys, xs) in ((done.entries, live.entries), (done.systems, live.systems))
+    for (keys, xs) in ((done.entries, live.entries), (done.systems, live.systems), (done.groups, live.groups))
         for (k, x) in zip(keys, xs)
             (k in plan.take || haskey(plan.merged, k)) && !isnothing(x.uid) && (uids[k] = x.uid)
         end
     end
     # The keys before renaming, by which `plan` and `done` name them
     ekeys, skeys = _team_keys(base.entries, d.entries), _team_keys(base.systems, d.systems)
+    gkeys = _team_keys(base.groups, d.groups)
     # A copy: `theirs` stays the state that was merged
-    d = Project(d.path, d.name; entries = copy(d.entries), systems = copy(d.systems))
+    d = Project(d.path, d.name; entries = copy(d.entries), systems = copy(d.systems), groups = copy(d.groups))
     _rename!(d, base, plan.renames)
-    for (xs, keys) in ((d.entries, ekeys), (d.systems, skeys)), i in eachindex(xs)
+    for (xs, keys) in ((d.entries, ekeys), (d.systems, skeys), (d.groups, gkeys)), i in eachindex(xs)
         x = xs[i]
         isnothing(x.uid) && haskey(uids, keys[i]) && (xs[i] = _with_uid(x, uids[keys[i]]))
     end
@@ -476,9 +525,10 @@ function _rebase!(draft, base::Project, live::Project, theirs::Project, plan, do
         isnothing(i) ? push!(ents, (k, e)) : (ents[i] = (k, e))
     end
     filter!(x -> !(x[1] in plan.take) || x[1] in done.entries, ents)
+    bgkeys = String[_merge_key(g) for g in base.groups]
     # The systems with their keys and the keys of their members and sources
     syss = Tuple{String, SystemEntry, Vector{String}, Vector{String}}[
-        (_merge_key(s), s, _names_to_keys(base, bkeys, s.members), _names_to_keys(base, bkeys, s.sources))
+        (_merge_key(s), s, _names_to_keys(base, bkeys, s.members, bgkeys), _names_to_keys(base, bkeys, s.sources))
         for s in base.systems]
     function set!(k, s, members, sources)
         i = findfirst(x -> x[1] == k, syss)
@@ -486,26 +536,50 @@ function _rebase!(draft, base::Project, live::Project, theirs::Project, plan, do
     end
     for (k, s) in zip(done.systems, live.systems)
         k in plan.take || continue
-        set!(k, s, _names_to_keys(live, done.entries, s.members),
+        set!(k, s, _names_to_keys(live, done.entries, s.members, done.groups),
             _names_to_keys(live, done.entries, s.sources))
     end
     filter!(x -> !(x[1] in plan.take) || x[1] in done.systems, syss)
     dkeys = _team_keys(base.entries, theirs.entries)
+    dgkeys = _team_keys(base.groups, theirs.groups)
     for (k, s) in zip(_team_keys(base.systems, theirs.systems), theirs.systems)
         haskey(plan.merged, k) || continue
-        set!(k, s, _names_to_keys(theirs, dkeys, s.members), _names_to_keys(theirs, dkeys, s.sources))
+        set!(k, s, _names_to_keys(theirs, dkeys, s.members, dgkeys), _names_to_keys(theirs, dkeys, s.sources))
+    end
+    # The groups likewise, with the keys of their members
+    grps = Tuple{String, GroupEntry, Vector{String}}[
+        (k, g, _names_to_keys(base, bkeys, g.members, bgkeys)) for (k, g) in zip(bgkeys, base.groups)]
+    function gset!(k, g, members)
+        i = findfirst(x -> x[1] == k, grps)
+        isnothing(i) ? push!(grps, (k, g, members)) : (grps[i] = (k, g, members))
+    end
+    for (k, g) in zip(done.groups, live.groups)
+        k in plan.take || continue
+        gset!(k, g, _names_to_keys(live, done.entries, g.members, done.groups))
+    end
+    filter!(x -> !(x[1] in plan.take) || x[1] in done.groups, grps)
+    for (k, g) in zip(dgkeys, theirs.groups)
+        haskey(plan.merged, k) || continue
+        gset!(k, g, _names_to_keys(theirs, dkeys, g.members, dgkeys))
     end
     function ids(keys)
         names = Symbol[]
         for k in keys
             i = findfirst(x -> x[1] == k, ents)
-            isnothing(i) || push!(names, ents[i][2].name)
+            if !isnothing(i)
+                push!(names, ents[i][2].name)
+                continue
+            end
+            j = findfirst(x -> x[1] == k, grps)
+            isnothing(j) || push!(names, grps[j][2].name)
         end
         return names
     end
     p = Project(joinpath(draft, "base"), live.name; entries = Entry[e for (_, e) in ents],
         systems = SystemEntry[SystemEntry(s.name, ids(m), ids(src), s.static, nothing, s.label, s.uid)
-                              for (_, s, m, src) in syss])
+                              for (_, s, m, src) in syss],
+        groups = GroupEntry[GroupEntry(g.name, ids(m), g.pos, g.rot, nothing, g.label, g.uid)
+                            for (_, g, m) in grps])
     _write_atomic(joinpath(draft, "base", "system.jl"), system_code(p))
     _write_code(joinpath(draft, "base"), merge(code.take, code.same))
     return nothing

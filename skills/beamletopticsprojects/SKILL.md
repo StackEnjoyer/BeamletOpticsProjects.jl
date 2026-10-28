@@ -1,6 +1,6 @@
 ---
 name: beamletopticsprojects
-description: Work on a project of BeamletOptics.jl with BeamletOpticsProjects.jl (Julia): a folder with system.jl (one line per component, source and system), src/<Name>.jl and Project.toml, which people open in the GUI while agents edit it. Use when a folder has a *.bmo file or a system.jl with @component, @source or @system lines, or when the user asks to load, change, trace, inspect or version such a project, or to take part in it next to the people in their windows.
+description: Work on a project of BeamletOptics.jl with BeamletOpticsProjects.jl (Julia): a folder with system.jl (one line per component, source and system), src/<Name>.jl and Project.toml, which people open in the GUI while agents edit it. Use when a folder has a *.bmo file or a system.jl with @component, @source, @group or @system lines, or when the user asks to load, change, trace, inspect or version such a project, or to take part in it next to the people in their windows.
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash
 metadata:
   beamletopticsprojects-version: "0.1"
@@ -35,7 +35,7 @@ When this Skill is active:
 ```text
 Bench/
 ├── Bench.bmo        the project file that people open; it only marks the folder. Do not edit it.
-├── system.jl        the setup: one line per component, source and system (FORMAT.md)
+├── system.jl        the setup: one line per component, source, group and system (FORMAT.md)
 ├── src/Bench.jl     own code (module Bench): functions that build components, own types. The GUI never writes it.
 ├── Project.toml     the exact versions of the packages ([compat]); [beamletoptics] format
 ├── view.toml        the view of the GUI (camera, colors, clip planes). Do not edit it.
@@ -58,7 +58,9 @@ Bench/
 
 3) Announce yourself (`announce`, see "Taking part") with the id you work on.
 4) Change single lines of `system.jl` (form: `FORMAT.md`) or code in `src/<Name>.jl`. Give a new line
-   the next free id of its prefix (`next_id(p, "L")`), without `uid`.
+   the next free id of its prefix (`next_id(p, "L")`), without `uid`. A `@group` line (a group of
+   the window) lists its members, which keep their own lines; systems list the group, not its
+   members (rules in `FORMAT.md`).
 5) Check: `p = load_project(".")`, then `r = trace(p, :S1)`: `r.detectors[:D1].hits`,
    `r.detectors[:D1].power` [W], `r.segments` (the `path_segments` of the sources: `start`, `stop`,
    `object`, ...). `look(p)` again to see the chains. Report the numbers; what counts as good is the

@@ -41,6 +41,23 @@ macro system(args...)
     return _system_macro(__source__, args)
 end
 
+"""
+    @group name = [members...] pos = (x, y, z) [rot = (a, b, c)]
+
+Builds a `BeamletOptics.ObjectGroup` of the components or groups `members` (in this order) and
+binds it to `name`. Building moves no member: the members keep the poses of their own lines, and
+the group gets the pivot `pos` (absolute position in m) and the orientation `rot` (angles in
+degrees as for [`@component`](@ref), or a 3×3 matrix; none: the identity).
+
+An entry or group is a member of at most one group, members are never sources or systems, and an
+entry inside a group is in systems only through its outermost group, which the `@system` lines
+list. While a project is loaded, the members may be defined below the line; in a plain `include`
+they must be bound above, as for [`@system`](@ref).
+"""
+macro group(args...)
+    return _group_macro(__source__, args)
+end
+
 """`file:line` of a macro call, for error messages."""
 _where(src::LineNumberNode) = string(src.file === nothing ? "system.jl" : basename(string(src.file)),
     ":", src.line)
@@ -112,16 +129,43 @@ function _system_macro(src, args)
     end
 end
 
-"""The names of a vector `[a, b, ...]` in `@system`."""
-function _names(ex, what, where)
+function _group_macro(src, args)
+    name, members, kws, where = _split_args("@group", src, args)
+    pos = rot = label = uid = nothing
+    for (k, v) in kws
+        if k === :pos
+            pos = esc(v)
+        elseif k === :rot
+            rot = esc(v)
+        elseif k === :label
+            label = esc(v)
+        elseif k === :uid
+            uid = esc(v)
+        else
+            throw(ArgumentError("$where: @group has no keyword `$k`"))
+        end
+    end
+    pos === nothing &&
+        throw(ArgumentError("$where: @group needs `pos = (x, y, z)`, the pivot of the group"))
+    m = _names(members, "members", where, "@group")
+    # Outside of `load_project` the names are the variables bound above
+    return quote
+        $(esc(name)) = $(_register_group!)($(QuoteNode(name)), $m, $pos, $rot, $label, $uid,
+            $where, () -> Any[$(map(esc, m)...)])
+    end
+end
+
+"""The names of a vector `[a, b, ...]` in `@system` or `@group`."""
+function _names(ex, what, where, macroname = "@system")
     (ex isa Expr && ex.head === :vect && all(a -> a isa Symbol, ex.args)) ||
-        throw(ArgumentError("$where: $what of @system must be a list of names `[a, b]`, got `$ex`"))
+        throw(ArgumentError("$where: $what of $macroname must be a list of names `[a, b]`, got `$ex`"))
     return Symbol[ex.args...]
 end
 
-"""Every name of `p`, entries and systems."""
+"""Every name of `p`, entries, systems and groups."""
 _taken(p::Project, name::Symbol) = any(e -> e.name === name, p.entries) ||
-                                   any(s -> s.name === name, p.systems)
+                                   any(s -> s.name === name, p.systems) ||
+                                   any(g -> g.name === name, p.groups)
 
 function _register_entry!(kind::Symbol, name::Symbol, code, @nospecialize(obj), pos, rot, meta,
         label, uid, where::String)
@@ -155,13 +199,121 @@ end
 """Key of the places (`file:line`) of the systems of the project being loaded."""
 const _WHERE = :BeamletOpticsProjects_where
 
+"""Key of the places (`file:line`) of the groups of the project being loaded."""
+const _GROUP_WHERE = :BeamletOpticsProjects_group_where
+
+function _register_group!(name::Symbol, members::Vector{Symbol}, pos, rot, label, uid,
+        where::String, member_objects)
+    bad = _nonfinite(pos, rot)
+    isnothing(bad) ||
+        throw(ArgumentError("$where: $bad of `$name` is not finite: $(bad == "pos" ? pos : rot)"))
+    p = _loading()
+    p === nothing && return _make_group(member_objects(), pos, rot)
+    _taken(p, name) && throw(ArgumentError("$where: the name `$name` is used twice"))
+    _check_uid(p, uid, where)
+    # Built when all lines are read (see `_build_groups!`): a member may be defined below
+    push!(p.groups, GroupEntry(name, members; pos, rot, label, uid))
+    push!(get!(Vector{String}, task_local_storage(), _GROUP_WHERE), where)
+    return nothing
+end
+
+"""
+An `ObjectGroup` of `objs` with the pivot `pos` and the orientation `rot` (see
+[`rotation_matrix`](@ref)), without moving any of the `objs` (never `apply_pose!` on a group: it
+would move them).
+"""
+function _make_group(objs::Vector{Any}, pos, rot)
+    g = BMO.ObjectGroup(objs)
+    BMO.set_pivot3d!(g, Float64[pos[1], pos[2], pos[3]])
+    rot === nothing || BMO.orientation!(g, rotation_matrix(rot))
+    return g
+end
+
+"""
+    _group_parents(p) -> Dict{Symbol, Symbol}
+
+The group of each entry or group of `p` that is a member of one, by the readable ids.
+"""
+function _group_parents(p::Project)
+    parents = Dict{Symbol, Symbol}()
+    for g in p.groups, m in g.members
+        parents[m] = g.name
+    end
+    return parents
+end
+
+"""
+The outermost group that holds `name` (`name` itself if it is in no group), by the `parents` of
+`_group_parents`.
+"""
+function _outermost(parents::Dict{Symbol, Symbol}, name::Symbol)
+    seen = Set{Symbol}()
+    while haskey(parents, name) && !(name in seen)
+        push!(seen, name)
+        name = parents[name]
+    end
+    return name
+end
+
+"""
+Builds the groups of the project `p` that `load_project` read, after all lines and before the
+systems, inner groups first, at the places `wheres` (`file:line`) for the error messages. Checks
+that the members are components or groups, each in at most one group, without a cycle.
+"""
+function _build_groups!(p::Project, wheres::Vector{String})
+    index = Dict(g.name => i for (i, g) in enumerate(p.groups))
+    parent = Dict{Symbol, Symbol}()
+    for (g, where) in zip(p.groups, wheres)
+        for (j, m) in enumerate(g.members)
+            m in view(g.members, 1:(j - 1)) &&
+                throw(ArgumentError("$where: `$m` is listed twice in the group `$(g.name)`"))
+            haskey(parent, m) &&
+                throw(ArgumentError("$where: `$m` is already in the group `$(parent[m])`; an object is in at most one group"))
+            parent[m] = g.name
+            m === g.name &&
+                throw(ArgumentError("$where: the group `$m` can not be a member of itself"))
+            haskey(index, m) && continue
+            any(s -> s.name === m, p.systems) &&
+                throw(ArgumentError("$where: `$m` is a system; the members of a group are components or groups"))
+            _lookup(p, m, :component, where; groups = false)
+        end
+    end
+    state = zeros(Int, length(p.groups))   # 0 new, 1 being built, 2 built
+    function build(i)
+        state[i] == 2 && return p.groups[i].object
+        g, where = p.groups[i], wheres[i]
+        state[i] == 1 &&
+            throw(ArgumentError("$where: the group `$(g.name)` contains itself (a cycle of groups)"))
+        state[i] = 1
+        objs = Any[haskey(index, m) ? build(index[m]) : _lookup(p, m, :component, where)
+                   for m in g.members]
+        obj = try
+            _make_group(objs, g.pos, g.rot)
+        catch err
+            err isa ArgumentError || rethrow()
+            throw(ArgumentError("$where: the group `$(g.name)`: $(err.msg)"))
+        end
+        p.groups[i] = GroupEntry(g.name, g.members, g.pos, g.rot, obj, g.label, g.uid)
+        state[i] = 2
+        return obj
+    end
+    foreach(build, eachindex(p.groups))
+    return p
+end
+
 """
 Builds the systems of the project `p` that `load_project` read, after all lines: the members and
 sources by their ids, at the places `wheres` (`file:line`) for the error messages.
 """
 function _build_systems!(p::Project, wheres::Vector{String})
     taken = Dict{Symbol, Symbol}()
+    parents = _group_parents(p)
     for (i, (se, where)) in enumerate(zip(p.systems, wheres))
+        # A system lists the outermost group, never what is inside a group
+        for n in se.members
+            haskey(parents, n) || continue
+            throw(ArgumentError("$where: `$n` is in the group `$(parents[n])`; a system lists the outermost group `$(_outermost(parents, n))` instead"))
+        end
         objs = Any[_lookup(p, n, :component, where) for n in se.members]
         foreach(n -> _lookup(p, n, :source, where), se.sources)
         for n in se.sources
@@ -179,15 +331,25 @@ end
 function _check_uid(p::Project, uid, where::String)
     isnothing(uid) && return nothing
     uid isa AbstractString || throw(ArgumentError("$where: uid must be a string"))
-    any(e -> e.uid == uid, p.entries) || any(s -> s.uid == uid, p.systems) || return nothing
+    any(e -> e.uid == uid, p.entries) || any(s -> s.uid == uid, p.systems) ||
+        any(g -> g.uid == uid, p.groups) || return nothing
     throw(ArgumentError("$where: the uid \"$uid\" is used twice; a new line has no uid, it gets one when it is saved"))
 end
 
-function _lookup(p::Project, name::Symbol, kind::Symbol, where::String)
+"""
+The object of the entry `name` of the `kind` (`:component` or `:source`) in `p`; with
+`groups = true` a `:component` may also be a group (its built object).
+"""
+function _lookup(p::Project, name::Symbol, kind::Symbol, where::String; groups::Bool = true)
     for e in p.entries
         e.name === name || continue
         e.kind === kind && return e.object
         throw(ArgumentError("$where: `$name` is a $(e.kind), not a $kind"))
+    end
+    for g in p.groups
+        g.name === name || continue
+        kind === :component && groups && return g.object
+        throw(ArgumentError("$where: `$name` is a group, not a $kind"))
     end
     throw(ArgumentError("$where: unknown $kind `$name` (define it with @$kind above)"))
 end

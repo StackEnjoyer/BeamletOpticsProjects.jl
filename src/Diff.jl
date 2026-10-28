@@ -31,11 +31,26 @@ struct SystemChange
 end
 
 """
-    diff_projects(base, new; rebuild = Symbol[]) -> (; entries, systems)
+    GroupChange(uid, kind, old, new)
 
-The changes from the project `base` to `new`, as `entries::Vector{EntryChange}` and
-`systems::Vector{SystemChange}`. Entries and systems are paired by their `uid`; one without a uid
-in `new` is `:added`. The order of the lines does not matter. The entries whose readable ids are in
+A change of the group with the machine id `uid`, like [`EntryChange`](@ref): `kind` is one of
+`:added`, `:removed`, `:renamed`, `:relabeled`, `:members` (other members) and `:moved` (other pivot
+`pos` or orientation `rot`).
+"""
+struct GroupChange
+    uid::Union{Nothing, String}
+    kind::Symbol
+    old::Union{Nothing, GroupEntry}
+    new::Union{Nothing, GroupEntry}
+end
+
+"""
+    diff_projects(base, new; rebuild = Symbol[]) -> (; entries, systems, groups)
+
+The changes from the project `base` to `new`, as `entries::Vector{EntryChange}`,
+`systems::Vector{SystemChange}` and `groups::Vector{GroupChange}`. Entries, systems and groups are
+paired by their `uid`; one without a uid in `new` is `:added`. The order of the lines does not
+matter, nor the order of the members of a system or group. The entries whose readable ids are in
 `rebuild` count as `:rebuilt` even with the same code, e.g. since the own code that they call
 changed.
 """
@@ -69,9 +84,26 @@ function diff_projects(base::Project, new::Project; rebuild = Symbol[])
         (old.static != s.static || _keys(base, old.members) != _keys(new, s.members) ||
          _keys(base, old.sources) != _keys(new, s.sources)) && schange!(:members, old, s)
     end
+    gpairs, gadded, gremoved = _pair(base.groups, new.groups)
+    gkinds = (:removed, :renamed, :relabeled, :members, :moved, :added)
+    gfound = Dict{Symbol, Vector{GroupChange}}(k => GroupChange[] for k in gkinds)
+    gchange!(kind, old, new) = push!(gfound[kind], GroupChange(something(new, old).uid, kind, old, new))
+    foreach(x -> gchange!(:removed, x, nothing), gremoved)
+    foreach(x -> gchange!(:added, nothing, x), gadded)
+    for (old, x) in gpairs
+        old.name == x.name || gchange!(:renamed, old, x)
+        old.label == x.label || gchange!(:relabeled, old, x)
+        _keys(base, old.members) == _keys(new, x.members) || gchange!(:members, old, x)
+        _same_group_pose(old, x) || gchange!(:moved, old, x)
+    end
     return (; entries = reduce(vcat, (found[k] for k in kinds)),
-        systems = reduce(vcat, (sfound[k] for k in skinds)))
+        systems = reduce(vcat, (sfound[k] for k in skinds)),
+        groups = reduce(vcat, (gfound[k] for k in gkinds)))
 end
+
+# The same pivot (exactly) and orientation (within 1e-13) of two groups
+_same_group_pose(a::GroupEntry, b::GroupEntry) =
+    a.pos == b.pos && maximum(abs, rotation_matrix(a.rot) - rotation_matrix(b.rot)) <= _ROT_TOL
 
 """
 Pairs the entries (or systems) of two states: by `uid`, then the remaining ones without a uid in
@@ -120,14 +152,23 @@ end
 
 _same_meta(a, b) = isequal(Dict{Symbol, Any}(a), Dict{Symbol, Any}(b))
 
-# The members of a system as a set of uids (or ids for entries without one) of the project `p`
+# The members of a system or group as a set of uids (or ids for those without one) of the entries
+# and groups of the project `p`
 function _keys(p::Project, names::Vector{Symbol})
     keys = Set{String}()
     for n in names
-        i = findfirst(e -> e.name === n, p.entries)
-        push!(keys, isnothing(i) || isnothing(p.entries[i].uid) ? "id:" * String(n) : p.entries[i].uid)
+        x = _member_named(p, n)
+        push!(keys, isnothing(x) || isnothing(x.uid) ? "id:" * String(n) : x.uid)
     end
     return keys
+end
+
+# The entry or group called `n` in `p`, `nothing` if there is none
+function _member_named(p::Project, n::Symbol)
+    i = findfirst(e -> e.name === n, p.entries)
+    isnothing(i) || return p.entries[i]
+    j = findfirst(g -> g.name === n, p.groups)
+    return isnothing(j) ? nothing : p.groups[j]
 end
 
 """
@@ -168,13 +209,23 @@ same_system(a::SystemEntry, pa::Project, b::SystemEntry, pb::Project) =
     a.name == b.name && a.label == b.label && a.static == b.static &&
     _keys(pa, a.members) == _keys(pb, b.members) && _keys(pa, a.sources) == _keys(pb, b.sources)
 
+"""
+    same_group(a, pa, b, pb) -> Bool
+
+Whether the groups `a` of the project `pa` and `b` of `pb` are the same: id, label, pivot,
+orientation and members (compared by their machine ids, in any order).
+"""
+same_group(a::GroupEntry, pa::Project, b::GroupEntry, pb::Project) =
+    a.name == b.name && a.label == b.label && _same_group_pose(a, b) &&
+    _keys(pa, a.members) == _keys(pb, b.members)
+
 """A new machine id: a UUID (version 4) as a string."""
 new_uid() = string(uuid4())
 
 """
     match_entries(olds, news) -> (; pairs, added, removed)
 
-Pairs the entries (or systems) of two states like [`diff_projects`](@ref): by `uid`, then the
+Pairs the entries (or systems, or groups) of two states like [`diff_projects`](@ref): by `uid`, then the
 remaining ones without a uid in `olds` by their readable id. `pairs` are the `(old, new)` tuples,
 `added` the unpaired ones of `news`, `removed` those of `olds`.
 """

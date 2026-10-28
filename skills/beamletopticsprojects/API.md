@@ -21,10 +21,10 @@ but not exported are qualified: `BeamletOpticsProjects.install_agent_skill()`.
 
 | Category | Names |
 |---|---|
-| Load and save | `load_project`, `save_project`, `new_project`, `Project`, `Entry`, `SystemEntry`, `system_code`, `project_file`, `project_marker`, `project_dir`, `project_stamp`, `ProjectChanged` |
-| The form of `system.jl` | `@component`, `@source`, `@system`, `id_prefix`, `next_id`, `apply_pose!`, `rotation_matrix` |
+| Load and save | `load_project`, `save_project`, `new_project`, `Project`, `Entry`, `SystemEntry`, `GroupEntry`, `system_code`, `project_file`, `project_marker`, `project_dir`, `project_stamp`, `ProjectChanged` |
+| The form of `system.jl` | `@component`, `@source`, `@group`, `@system`, `id_prefix`, `next_id`, `apply_pose!`, `rotation_matrix` |
 | Trace and read | `trace`, `look` |
-| Versions and changes | `save_version`, `versions`, `version_summary`, `diff_projects`, `EntryChange`, `SystemChange`, `copy_code` |
+| Versions and changes | `save_version`, `versions`, `version_summary`, `diff_projects`, `EntryChange`, `SystemChange`, `GroupChange`, `copy_code` |
 | Participants | `announce`, `leave` |
 | Teams | `fork_team`, `teams`, `post!`, `board`, `claim!`, `release!`, `wait_for`, `merge_draft!` |
 | Guards | `evaluate` |

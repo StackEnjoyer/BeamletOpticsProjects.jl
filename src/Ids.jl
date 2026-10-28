@@ -1,5 +1,5 @@
 #=
-Readable ids of the entries and systems: a prefix of the family and a number, e.g. `L1`, `BS2`
+Readable ids of the entries, groups and systems: a prefix of the family and a number, e.g. `L1`, `BS2`
 =#
 
 """
@@ -24,12 +24,13 @@ id_prefix(::BMO.AbstractSystem) = "S"
     next_id(project, prefix) -> Symbol
 
 The next free readable id with the `prefix` in `project`: the prefix and one more than the largest
-number of an entry or system with that prefix, e.g. `:L4` after `L1`, `L3`.
+number of an entry, group or system with that prefix, e.g. `:L4` after `L1`, `L3`.
 """
 function next_id(p::Project, prefix::AbstractString)
     re = Regex("^" * prefix * "(\\d+)\$")
     n = 0
-    for name in Iterators.flatten(((e.name for e in p.entries), (s.name for s in p.systems)))
+    for name in Iterators.flatten(((e.name for e in p.entries), (s.name for s in p.systems),
+            (g.name for g in p.groups)))
         m = match(re, String(name))
         isnothing(m) || (n = max(n, parse(Int, m.captures[1])))
     end

@@ -361,10 +361,10 @@ struct _Line
     rest::Dict{Symbol, String}
 end
 
-const _LINE_MACROS = (Symbol("@component"), Symbol("@source"), Symbol("@system"))
+const _LINE_MACROS = (Symbol("@component"), Symbol("@source"), Symbol("@system"), Symbol("@group"))
 
 """
-The lines `@component`, `@source` and `@system` of `text` and its other lines (without comments
+The lines `@component`, `@source`, `@system` and `@group` of `text` and its other lines (without comments
 and blank lines); `nothing` if a line does not parse.
 """
 function _parse_lines(text)

@@ -69,12 +69,33 @@ function _power_text(P::Real)
     return string(round(P * 1e12; sigdigits = 4), " pW")
 end
 
-"""The label of the entry or system `id` of `p` in quotes and a space, `""` if it has none."""
+"""The label of the entry, system or group `id` of `p` in quotes and a space, `""` if it has none."""
 function _label_text(p::Project, id::Symbol)
-    for x in Iterators.flatten((p.entries, p.systems))
+    for x in Iterators.flatten((p.entries, p.systems, p.groups))
         x.name === id && return isnothing(x.label) ? "" : string(repr(x.label), " ")
     end
     return ""
+end
+
+"""
+The readable ids `names` of `p` with each group replaced by its members, recursively: the
+components that the names stand for.
+"""
+function _leaf_names(p::Project, names)
+    out = Symbol[]
+    for n in names
+        i = findfirst(g -> g.name === n, p.groups)
+        isnothing(i) ? push!(out, n) : append!(out, _leaf_names(p, p.groups[i].members))
+    end
+    return out
+end
+
+"""A member `m` of a system for `look`: its id and label, a group with its members in parentheses."""
+function _member_text(p::Project, m::Symbol)
+    text = rstrip(string(m, " ", _label_text(p, m)))
+    i = findfirst(g -> g.name === m, p.groups)
+    isnothing(i) && return text
+    return string(text, " (", join((_member_text(p, x) for x in p.groups[i].members), ", "), ")")
 end
 
 """The position of `obj` [m], `nothing` if it has none."""
@@ -196,7 +217,7 @@ function _look_systems(io, p::Project, near)
     ids = _object_ids(p)
     near_ids = isnothing(near) ? nothing : Set(String.(near))
     for s in p.systems
-        shown = isnothing(near) || any(in(near), s.members) || any(in(near), s.sources)
+        shown = isnothing(near) || any(in(near), _leaf_names(p, s.members)) || any(in(near), s.sources)
         lines = String[]
         result = try
             _trace_sources(p, s; flen = 0.1)
@@ -233,7 +254,7 @@ function _look_systems(io, p::Project, near)
             end
         end
         shown || !isempty(lines) || continue
-        members = join((string(m, " ", _label_text(p, m)) |> rstrip for m in s.members), ", ")
+        members = join((_member_text(p, m) for m in s.members), ", ")
         head = string("  ", s.name, " ", _label_text(p, s.name), "= [", members, "]")
         head *= isempty(s.sources) ? ", no sources" : string(", sources [", join((rstrip(string(b, " ", _label_text(p, b))) for b in s.sources), ", "), "]")
         println(io, head, s.static ? ", static" : "")
@@ -245,15 +266,21 @@ end
 function _look_free(io, p::Project, near)
     used = Set{Symbol}()
     for s in p.systems
-        union!(used, s.members, s.sources)
+        union!(used, s.members, _leaf_names(p, s.members), s.sources)
     end
-    free = [e for e in p.entries if !(e.name in used) && (isnothing(near) || e.name in near)]
+    # Inside a group: shown with the outermost group
+    inside = Set{Symbol}(m for g in p.groups for m in g.members)
+    free = [e for e in p.entries if !(e.name in used) && !(e.name in inside) && (isnothing(near) || e.name in near)]
+    groups = [g for g in p.groups if !(g.name in used) && !(g.name in inside) &&
+              (isnothing(near) || any(in(near), _leaf_names(p, g.members)))]
     println(io, "Free objects")
-    isempty(free) && println(io, "  none")
+    isempty(free) && isempty(groups) && println(io, "  none")
+    at_text(pos) = isnothing(pos) ? "" : string("at (", join(round.(1e3 .* pos; digits = 1), ", "), ") mm")
     for e in free
-        pos = _position(e.object)
-        at = isnothing(pos) ? "" : string("at (", join(round.(1e3 .* pos; digits = 1), ", "), ") mm")
-        println(io, "  ", e.name, " ", _label_text(p, e.name), e.kind, " ", at)
+        println(io, "  ", e.name, " ", _label_text(p, e.name), e.kind, " ", at_text(_position(e.object)))
+    end
+    for g in groups
+        println(io, "  ", _member_text(p, g.name), " group, pivot ", at_text(collect(g.pos)))
     end
     return nothing
 end

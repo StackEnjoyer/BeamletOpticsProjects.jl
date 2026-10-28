@@ -8,15 +8,19 @@ Loading a project
 Loads the project in the folder `path`, or of the project file `path` (`<name>.bmo`, see
 [`project_marker`](@ref)): includes the own code `src/<name>.jl` (a module `<name>`,
 whose exported names `system.jl` can use) and runs `system.jl`, whose [`@component`](@ref),
-[`@source`](@ref) and [`@system`](@ref) fill the returned [`Project`](@ref). Both run in a new
-module of their own, which `using BeamletOptics, BeamletOpticsProjects`.
+[`@source`](@ref), [`@group`](@ref) and [`@system`](@ref) fill the returned [`Project`](@ref).
+Both run in a new module of their own, which `using BeamletOptics, BeamletOpticsProjects`. The
+groups are built when all lines are read, inner groups first, and then the systems.
 
-Errors name the line of `system.jl`. The versions in `Project.toml` are not checked.
+Errors name the line of `system.jl`. A project whose format (`[beamletoptics] format` of
+`Project.toml`, none: 1) is newer than the one this package reads is refused; the versions of the
+packages in `Project.toml` are not checked.
 """
 function load_project(path::AbstractString)
     path = project_dir(path)
     file = joinpath(path, "system.jl")
     isfile(file) || throw(ArgumentError("no system.jl in \"$path\""))
+    _check_format(path)
     name = project_name(path)
     # Before reading: a change while loading makes the stamp differ
     stamp = project_stamp(path)
@@ -25,11 +29,27 @@ function load_project(path::AbstractString)
     p.mod = mod
     task_local_storage(_LOADING, p) do
         task_local_storage(_WHERE, String[]) do
-            Base.include(mod, file)
-            _build_systems!(p, task_local_storage(_WHERE))
+            task_local_storage(_GROUP_WHERE, String[]) do
+                Base.include(mod, file)
+                _build_groups!(p, task_local_storage(_GROUP_WHERE))
+                _build_systems!(p, task_local_storage(_WHERE))
+            end
         end
     end
     return p
+end
+
+"""
+Throws if the project in the folder `path` has a newer format (`[beamletoptics] format` of its
+`Project.toml`) than [`FORMAT`](@ref); a missing entry is format 1.
+"""
+function _check_format(path)
+    toml = joinpath(path, "Project.toml")
+    isfile(toml) || return nothing
+    format = get(get(TOML.parsefile(toml), "beamletoptics", Dict{String, Any}()), "format", 1)
+    format isa Integer || throw(ArgumentError("[beamletoptics] format of \"$toml\" must be an integer, got $(repr(format))"))
+    format ≤ FORMAT && return nothing
+    throw(ArgumentError("the project in \"$path\" has format $format, this BeamletOpticsProjects reads format $FORMAT and older: update BeamletOpticsProjects"))
 end
 
 """File extension of the project file, see [`project_marker`](@ref)."""

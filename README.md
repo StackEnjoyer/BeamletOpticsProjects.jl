@@ -15,6 +15,17 @@ as it was, also years later.
 > [!NOTE]
 > A prototype, not registered yet. The format of the files may still change.
 
+## The packages
+
+<div align="center">
+  <img src="./docs/src/assets/packages.svg" alt="The packages of BeamletOptics and who loads what" width="700">
+</div>
+
+BeamletOptics does the physics. BeamletOpticsProjects is the protocol of a project, the same for
+every participant: people and agents, with a window or without. BeamletOpticsGUI is the window on
+top of it. An agent needs no GUI: it works with BeamletOptics and BeamletOpticsProjects only. Each
+package ships its own agent skill (`install_agent_skill()`).
+
 ## A project
 
 ```text

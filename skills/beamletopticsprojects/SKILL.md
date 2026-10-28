@@ -33,6 +33,10 @@ When this Skill is active:
   and optimizations. Each candidate goes into `system.jl` before you evaluate it (`trace`, `look`),
   never only into a script of yours, so that the people see what you try. A draft (see "Teams")
   only when the person asks for variants side by side.
+- **Ask once, at the start of the work, whether you should keep a report on the tools** (see
+  "Report on the tools"): where BeamletOptics, BeamletOpticsProjects and BeamletOpticsGUI got in
+  your way and what you would have needed. It is how these packages are made easier to use for
+  agents, one session at a time.
 
 ## The folder
 
@@ -200,6 +204,26 @@ A version is a git commit of the project folder (libgit2, no git install needed)
 lists them, newest first; `version_summary(".")` says what changed since the last one. Versions are
 the person's: `Ctrl+S` in the window saves one. Call `save_version(".")` only when the person asks.
 `.bmo/` and `.claude/skills/` are never part of a version.
+
+## Report on the tools
+
+The packages of BeamletOptics are improved for agents from what agents run into while they use
+them. At the start of the work, ask the person once: "Shall I keep a report on where the tools got
+in my way?" Only if they say yes:
+
+- Keep it in `.bmo/reports/<your name>-<date>.md` (e.g. `claude-2026-10-29.md`), and write each
+  point when it happens, not from memory at the end. Tell the person the path when you are done.
+- One point per friction, most costly first at the end: what you wanted to do; what you tried
+  (the call, the error message in its first line, the file and line of the docs or skill you
+  followed); what it cost (failed attempts, a workaround, guessing, waiting); and what would have
+  helped (a function, a keyword, an error message that names the cause, a sentence in a skill, a
+  return value you could use directly). Name the package: BeamletOptics, BeamletOpticsProjects or
+  BeamletOpticsGUI.
+- Also what was missing in the skills, wrong in them, or hard to find; and what worked well, so it
+  stays.
+- Facts only, about the tools, not about the person or the task. No secrets or data of the
+  project beyond what a point needs.
+- The report does not replace your work: do the task first, write the point in a few lines.
 
 ## Local references bundled with this Skill
 

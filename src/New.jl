@@ -244,6 +244,13 @@ _agents_template(name) = """
     using BeamletOpticsGUI; BeamletOpticsGUI.install_agent_skill()   # if the GUI is installed
     ```
 
+    ## Report on the tools
+
+    At the start of the work, ask the person once whether you should keep a report on where
+    BeamletOptics, BeamletOpticsProjects and BeamletOpticsGUI got in your way and what you would
+    have needed (see "Report on the tools" in the skill `beamletopticsprojects`). Agents' reports
+    are how these packages become easier to use for agents.
+
     ## Files
 
     - `system.jl`: the setup, one line per component, source and system.

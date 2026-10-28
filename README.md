@@ -18,7 +18,10 @@ as it was, also years later.
 ## The packages
 
 <div align="center">
-  <img src="./docs/src/assets/packages.svg" alt="The packages of BeamletOptics and who loads what" width="700">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="./docs/src/assets/packages-dark.svg">
+    <img src="./docs/src/assets/packages-light.svg" alt="The packages of BeamletOptics and who loads what" width="700">
+  </picture>
 </div>
 
 BeamletOptics does the physics. BeamletOpticsProjects is the protocol of a project, the same for

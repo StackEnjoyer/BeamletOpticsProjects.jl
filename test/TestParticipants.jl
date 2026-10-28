@@ -96,7 +96,7 @@ end
     file = presence_file(dir, id)
     @test isfile(file)
     d = read_presences(dir)[id]
-    @test d["name"] == "Claude (Opus 5.5)" && d["kind"] == "agent" && d["ttl"] === 600.0
+    @test d["name"] == "Claude (Opus 5.5)" && d["kind"] == "agent" && d["ttl"] === 120.0
     @test d["selected_id"] == "L1" && d["doing"] == "aligning" && d["beat"] == 1
     @test d["host"] == gethostname()
     # Without a write, `written` is not claimed

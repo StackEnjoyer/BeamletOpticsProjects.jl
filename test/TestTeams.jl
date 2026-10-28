@@ -104,15 +104,15 @@ end
 @testset "claim! and release!" begin
     draft = fork_team(project_dir(lens(:L1, 0.1)), "t1"; by = "anna")
     @test claim!(draft; by = "anna", ids = [:L1, :L2])
-    @test TOML.parsefile(joinpath(draft, "claims", "L1.toml"))["by"] == "anna"
+    @test TOML.parsefile(joinpath(draft, "claims", "l1.toml"))["by"] == "anna"
     # Held by another: fails, and claims none of its ids
     @test !claim!(draft; by = "ben", ids = [:L3, :L2])
-    @test !isfile(joinpath(draft, "claims", "L3.toml"))
+    @test !isfile(joinpath(draft, "claims", "id_L3.toml"))
     @test claim!(draft; by = "ben", ids = [:L3])
     # Its own claims again
     @test claim!(draft; by = "anna", ids = [:L1, :L4])
     release!(draft; by = "anna")
-    @test sort(readdir(joinpath(draft, "claims"))) == ["L3.toml"]
+    @test sort(readdir(joinpath(draft, "claims"))) == ["id_L3.toml"]
     @test claim!(draft; by = "ben", ids = [:L1, :L2])
     # Two tasks claim the same id at the same time: one gets it
     for i in 1:10
@@ -152,15 +152,12 @@ end
 
 @testset "claim!: ids in sorted order" begin
     # Two that claim overlapping ids in other orders meet at the first of them in sorted order: a
-    # claim that fails there creates (and removes) no file, so the folder is not touched
+    # claim that fails there leaves no claim of its own (only its temporary file came and went)
     draft = fork_team(project_dir(lens(:L1, 0.1)), "t1"; by = "anna")
     @test claim!(draft; by = "ben", ids = [:A1])
     dir = joinpath(draft, "claims")
-    sleep(0.1)
-    t = mtime(dir)
     @test !claim!(draft; by = "anna", ids = [:Z9, :A1])
-    @test mtime(dir) == t
-    @test readdir(dir) == ["A1.toml"]
+    @test readdir(dir) == ["id_A1.toml"]
 end
 
 @testset "merge_draft!" begin

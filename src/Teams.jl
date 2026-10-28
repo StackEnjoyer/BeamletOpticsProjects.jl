@@ -1,9 +1,11 @@
 #=
 Teams: an orchestrator and its workers (people or agents alike) work in a draft of the project,
 a copy under `.bmo/drafts/<team>/` with the state it was forked from (`base/`), and talk over a
-board of one file per entry. Claims on readable ids keep two workers off the same lines. The
-participant who has the say over the project merges the draft into it (`merge_draft!`, on top of
-`merge_plan`). Every file is written atomically or created exclusively, also on a shared drive.
+board of one file per entry. A draft is for variants; a team works in the live project otherwise.
+Claims keep two workers off the same lines, in a draft as in the live project (`claim!` with the
+folder of the draft, see `Claims.jl`). The participant who has the say over the project merges the
+draft into it (`merge_draft!`, on top of `merge_plan` and `_compose`). Every file is written
+atomically or created exclusively, also on a shared drive.
 =#
 
 # The files of a project that a draft copies (and its `base/`), besides `src/`
@@ -182,73 +184,6 @@ function wait_for(draft::AbstractString; kind::Symbol, after::Int = 0, timeout::
         left <= 0 && return nothing
         sleep(min(_BOARD_POLL, left))
     end
-end
-
-#=
-Claims
-=#
-
-# The participant who holds the claim file `file`, `nothing` while it is unreadable
-function _claim_owner(file)
-    try
-        return get(TOML.parsefile(file), "by", nothing)
-    catch e
-        e isa InterruptException && rethrow()
-        return nothing
-    end
-end
-
-"""
-    claim!(draft; by, ids) -> Bool
-
-Claims the readable ids `ids` (e.g. `[:L1, :M2]`, the lines a worker is going to change) in the
-team draft `draft` for the participant `by`: `true` if all of them are claimed by `by` now (also
-those it held already), `false` if one is claimed by another participant; then none of `ids` is
-claimed by this call. A claim is the file `claims/<id>.toml` with `by`, created exclusively, so of
-two participants that claim the same id at the same time exactly one gets it; the ids are claimed
-in sorted order, so that this also holds for two that claim overlapping ids in any order. See
-[`release!`](@ref).
-"""
-function claim!(draft::AbstractString; by, ids::Vector{Symbol})
-    dir = joinpath(abspath(draft), "claims")
-    mkpath(dir)
-    by = String(by)
-    body = sprint(TOML.print, Dict("by" => by))
-    created = String[]
-    F = Base.Filesystem
-    # In one order for all, so that of two participants that claim overlapping ids one gets them
-    for file in sort!(unique(joinpath(dir, _file_part(id) * ".toml") for id in ids))
-        try
-            f = F.open(file, F.JL_O_CREAT | F.JL_O_EXCL | F.JL_O_WRONLY, 0o644)
-            try
-                write(f, body)
-            finally
-                close(f)
-            end
-            push!(created, file)
-        catch e
-            _exists_error(e) || rethrow()
-            # An unreadable claim is one that another participant is writing
-            _claim_owner(file) == by && continue
-            foreach(rm, created)
-            return false
-        end
-    end
-    return true
-end
-
-"""
-    release!(draft; by)
-
-Releases every claim of the participant `by` in the team draft `draft`, see [`claim!`](@ref).
-"""
-function release!(draft::AbstractString; by)
-    dir = joinpath(abspath(draft), "claims")
-    isdir(dir) || return nothing
-    for f in readdir(dir; join = true)
-        endswith(f, ".toml") && _claim_owner(f) == String(by) && rm(f; force = true)
-    end
-    return nothing
 end
 
 #=
@@ -619,17 +554,17 @@ function merge_draft!(dir::AbstractString, name::AbstractString)
     taken = sort!(vcat(changed, String["src/" * f for f in keys(code.take)]))
     conflicts = sort!(vcat(String[plan.conflicts...], String["src/" * f for f in code.conflicts]))
     isempty(taken) && return (; taken, conflicts)
-    done = _apply_plan!(live, base, theirs, plan)
+    merged, done = _compose(base, live, theirs, plan)
     parts = String[]
     if !isempty(changed)
         file = joinpath(dir, "system.jl")
         before = read(file, String)
-        save_project(live)
+        save_project(merged)
         append!(parts, _system_changes(before, read(file, String)))
     end
     _write_code(dir, code.take)
     isempty(code.take) || push!(parts, "own code changed")
     save_version(dir; message = isempty(parts) ? "Team $name" : "Team $name: " * join(parts, "; "))
-    _rebase!(draft, base, live, theirs, plan, done, code)
+    _rebase!(draft, base, merged, theirs, plan, done, code)
     return (; taken, conflicts)
 end

@@ -156,34 +156,50 @@ and its first version (see [`save_version`](@ref)).
 Throws [`ProjectChanged`](@ref) and writes nothing if the files changed since the project was
 loaded or saved (its `stamp`, see [`project_stamp`](@ref)), unless `force` is `true`. Afterwards
 the `stamp` of `project` is that of the written files. Saving to another folder (`path`) does not
-check.
+check. With the participant `by` (see [`claim!`](@ref)), throws an `ArgumentError` and writes
+nothing if the save changes a line claimed by another participant.
+
+The check and the write happen under the lock `.bmo/write.lock` (`FileWatching.Pidfile.mkpidlock`,
+stale after 10 s), so of two participants that save at the same moment, the second sees the
+first's write and throws `ProjectChanged` instead of overwriting it. The age of a lock is compared
+with the clock of this machine: the clocks of the machines are assumed to agree within a few
+seconds (one Windows domain).
 """
-function save_project(p::Project; packages::Vector{Module} = Module[], force::Bool = false)
-    force || isnothing(p.stamp) || !isfile(project_file(p, "system.jl")) ||
-        project_stamp(p.path) == p.stamp || throw(ProjectChanged(p.path))
-    _give_uids!(p)
-    mkpath(p.path)
-    fresh = !isfile(project_file(p, "Project.toml"))
-    fresh && _scaffold(p.path, p.name, packages)
-    # A project of the time before project files
-    marker = project_marker(p.path)
-    isfile(marker) || write(marker, _marker_text(splitext(basename(marker))[1]))
+function save_project(p::Project; packages::Vector{Module} = Module[], force::Bool = false,
+        by = nothing)
+    mkpath(joinpath(p.path, ".bmo"))
+    fresh = false
     file = project_file(p, "system.jl")
-    _write_atomic(file, system_code(p))
+    mkpidlock(joinpath(p.path, ".bmo", "write.lock"); stale_age = _WRITE_LOCK_STALE) do
+        force || isnothing(p.stamp) || !isfile(file) ||
+            project_stamp(p.path) == p.stamp || throw(ProjectChanged(p.path))
+        _give_uids!(p)
+        fresh = !isfile(project_file(p, "Project.toml"))
+        fresh && _scaffold(p.path, p.name, packages)
+        # A project of the time before project files
+        marker = project_marker(p.path)
+        isfile(marker) || write(marker, _marker_text(splitext(basename(marker))[1]))
+        text = system_code(p)
+        isnothing(by) || _check_claims(p.path, String(by), text)
+        _write_atomic(file, text)
+        p.stamp = project_stamp(p.path)
+    end
     # A new project: its first version
     fresh && _first_version(p.path)
-    p.stamp = project_stamp(p.path)
     return file
 end
 
+# How old the write lock of a project may be before another writer takes it over [s]
+const _WRITE_LOCK_STALE = 10
+
 function save_project(p::Project, path::AbstractString; packages::Vector{Module} = Module[],
-        force::Bool = false)
+        force::Bool = false, by = nothing)
     path = abspath(path)
     if path != p.path
         p.path = path
         p.stamp = nothing
     end
-    return save_project(p; packages, force)
+    return save_project(p; packages, force, by)
 end
 
 """Gives every entry, system and group of `p` without a machine id a new one (a UUID)."""
@@ -206,20 +222,30 @@ function _give_uids!(p::Project)
 end
 
 """
-Writes `text` to a temporary file next to `file` and then moves it there. A move that fails with
-an `IOError` or `SystemError` (a sharing violation of a network drive) is tried again, up to
-`tries` times `wait` seconds apart; then the error is thrown. `move` is the function that moves.
+Writes `text` to a temporary file of this writer next to `file` and then renames it to `file`, which
+replaces it at once. A rename that fails with an `IOError` or `SystemError` (a sharing violation of
+a network drive) is tried again, up to `tries` times `wait` seconds apart; then the temporary file
+is removed and the error thrown. `move` is the function that renames. Each writer has a temporary
+file of its own, so two writers at the same time never write into one.
 """
-function _write_atomic(file, text; move = mv, tries::Int = 10, wait::Real = 0.05)
-    tmp = file * ".tmp"
+function _write_atomic(file, text; move = _rename, tries::Int = 10, wait::Real = 0.05)
+    tmp = string(file, ".", getpid(), "-", rand(UInt32), ".tmp")
     write(tmp, text)
-    for attempt in 1:tries
-        try
-            move(tmp, file; force = true)
-            return file
-        catch e
-            (e isa Base.IOError || e isa SystemError) && attempt < tries || rethrow()
-            sleep(wait)
+    try
+        for attempt in 1:tries
+            try
+                move(tmp, file; force = true)
+                return file
+            catch e
+                (e isa Base.IOError || e isa SystemError) && attempt < tries || rethrow()
+                sleep(wait)
+            end
         end
+    finally
+        rm(tmp; force = true)
     end
 end
+
+# A rename that replaces `to` at once: never deletes it first or copies (as `mv` does after a
+# failed rename), so `to` is always one whole file
+_rename(from, to; force = true) = Base.rename(from, to)

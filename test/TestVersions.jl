@@ -247,7 +247,8 @@ end
     before = sort(readdir(old))
     p = load_project(old)
     save_project(p)
-    @test sort(readdir(old)) == before
+    # only the folder of the write lock (see `save_project`), which git does not see while it is empty
+    @test setdiff(sort(readdir(old)), [".bmo"]) == before && isempty(readdir(joinpath(old, ".bmo")))
     @test !occursin(".bmo", read(joinpath(old, ".gitignore"), String))
     # save_version on a project without a repository creates one (D2a)
     @test isempty(versions(old))

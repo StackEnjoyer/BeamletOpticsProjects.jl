@@ -39,7 +39,7 @@ coding agent, has one while it works on the project. It is a TOML file with the 
 - `kind`: e.g. `"person"` or `"agent"` (default `"person"`), a label for display only;
 - `beat`: an integer that grows by one with every write (required; a file without it is ignored);
 - `ttl`: the seconds that the last change of `beat` counts (default 60, clamped to 5…3600);
-  windows write 60, agents e.g. 600, since they write only when they act;
+  windows write 60, agents 120 by default (`announce`), since they write only when they act;
 - `selected`: the machine id (uid) of the object it works on, `""` if none;
 - `selected_id`: the readable id of that object (e.g. `"L1"`), used when `selected` is missing or
   unknown;
@@ -170,14 +170,16 @@ clocks of the machines are never compared.
 alive(o, now::Real) = now - o.seen_at < o.ttl
 
 """
-    announce(dir; name, doing = "", selected_id = "", ttl = 600, kind = "agent", wrote = false) -> String
+    announce(dir; name, doing = "", selected_id = "", ttl = 120, kind = "agent", wrote = false) -> String
 
 Takes part in the project in the folder `dir`, or tells the others the next step: writes the
 presence file (see [`presence_file`](@ref)) of the id `"<name>@agent"` (characters outside
 `[A-Za-z0-9_.@-]` replaced by `_`) with `name`, the host, `kind` (a label only), `ttl`, the
 readable id `selected_id` of the object it works on and `doing` (a few words). `beat` grows by one
 with every call (see [`write_presence`](@ref)). Call it before changing the project, after each
-change and at every step; call [`leave`](@ref) when done. Returns the id.
+change and at every step; call [`leave`](@ref) when done. Returns the id. The claims of the
+participant (see [`claim!`](@ref)) live as long as its presence, i.e. `ttl` seconds after its
+last call; `claim!` writes the presence again.
 
 `name` is the id of the participant and must be unique per participant (e.g. `"claude-w1"` for a
 worker of a team): participants with the same `name` share one presence file, so their calls
@@ -189,7 +191,7 @@ of that change, as they do for a window after a save, also when the call comes a
 merged the change. Otherwise the `written` of the presence file before is kept (`""` if there is
 none), so a call that wrote nothing never claims the change of someone else.
 """
-function announce(dir::AbstractString; name, doing = "", selected_id = "", ttl = 600, kind = "agent",
+function announce(dir::AbstractString; name, doing = "", selected_id = "", ttl = 120, kind = "agent",
         wrote::Bool = false)
     id = _participant_id(String(name), "agent")
     written = wrote ? project_stamp(dir) : _file_written(presence_file(dir, id))

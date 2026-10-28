@@ -1,7 +1,8 @@
 #=
 Three-way merge of two states of a project that changed from a common base: which changes of
 "theirs" to take into "mine", and which are conflicts. Used by the open window for changes of the
-files (an agent, another person) and for drafts of teams (see `Teams.jl`)
+files (an agent, another person) and for drafts of teams (see `Teams.jl`); `compose` builds the
+state of one with the other at some keys (e.g. the open conflicts of a window)
 =#
 
 # The key of an entry or a system: its machine id, or its readable id for a line without one
@@ -273,4 +274,84 @@ function merge_plan(base::Project, mine::Project, theirs::Project; stale = key -
                               if c.kind in (:added, :renamed) && _change_key(c) in take)
     renames = _renumbered(base, mine, theirs, sort!(collect(added); by = first))
     return (; take, conflicts, merged, renames, mine = g, theirs = d)
+end
+
+#=
+Composing a state from two
+=#
+
+"""
+The project `mine` with the entries, systems and groups of `theirs` for the keys of `plan`
+(`take`, `merged`, `renames` as of [`merge_plan`](@ref) of `base`, `mine` and `theirs`), see
+`_apply_plan!`; `mine` stays as it is. The result has the folder, name, module and stamp of `mine`,
+so that [`save_project`](@ref) of it throws `ProjectChanged` if the files changed since `mine` was
+loaded. Returns it and the keys of its entries, systems and groups, `(project, done)`.
+"""
+function _compose(base::Project, mine::Project, theirs::Project, plan)
+    p = Project(mine.path, mine.name, copy(mine.entries), copy(mine.systems), copy(mine.groups),
+        mine.mod, mine.stamp)
+    done = _apply_plan!(p, base, theirs, plan)
+    return p, done
+end
+
+"""
+The entries, systems and groups of `theirs` with keys in `take` whose readable id an entry, system
+or group of `mine` has that is not in `take` (it stays): `(key, entry or system or group)`, sorted
+by key, for `_renumbered`.
+"""
+function _clashes(base::Project, mine::Project, theirs::Project, take)
+    km, kt = _base_keys(base, mine), _base_keys(base, theirs)
+    out = Tuple{String, Any}[]
+    for x in Iterators.flatten((theirs.entries, theirs.systems, theirs.groups))
+        k = kt[x.name]
+        k in take || continue
+        other = get(km, x.name, k)
+        other == k || other in take || push!(out, (k, x))
+    end
+    return sort!(out; by = first)
+end
+
+"""
+    compose(base, mine, theirs, keys) -> (; project, keys)
+
+The state of the project `mine` with that of `theirs` at the keys `keys` (both changed from the
+common state `base`): the entries, systems and groups of `theirs` for those keys (also removed:
+what `theirs` does not have), those of `mine` elsewhere. `mine` stays as it is. Keys are those of
+[`merge_plan`](@ref): the machine id, or `"id:L1"` for a line without one; the key of a line is the
+same in all three states. Systems and groups refer to their members by key, so a system of `mine`
+holds an entry of `theirs` and a group of `theirs` holds the entries of `mine`; members that are
+gone are left out.
+
+The keys are widened where the result would break a rule otherwise: a system of `mine` that would
+hold a source that a system of `theirs` at `keys` holds (a source belongs to at most one system),
+and a system or group that would break the tree of groups (an entry or a group in two groups, or in
+a group and in a system, or a group that the result does not have), get the state of `theirs` too,
+until no rule is broken. An entry, system or group of `theirs` whose readable id one of `mine` that
+stays has gets the next free id of its prefix.
+
+Returns the result and the widened keys, sorted. The result has the folder, the name and the
+stamp of `mine`: [`save_project`](@ref) of it throws `ProjectChanged` if the files changed since
+`mine` was loaded.
+
+E.g. a window with an open conflict at `L1` saves its state everywhere else, and the files keep
+theirs at `L1`:
+
+```julia
+r = compose(base, window, files, ["l1-uid"])
+save_project(r.project)
+```
+"""
+function compose(base::Project, mine::Project, theirs::Project, keys)
+    take = Set{String}(String(k) for k in keys)
+    merged = Dict{String, @NamedTuple{members::Set{String}, sources::Set{String}}}()
+    while true
+        bad = union(_shared_sources(base, mine, theirs, take, merged),
+            _tree_conflicts(base, mine, theirs, take, merged))
+        wider = setdiff(bad, take)
+        isempty(wider) && break
+        union!(take, wider)
+    end
+    renames = _renumbered(base, mine, theirs, _clashes(base, mine, theirs, take))
+    project, _ = _compose(base, mine, theirs, (; take, merged, renames))
+    return (; project, keys = sort!(collect(take)))
 end

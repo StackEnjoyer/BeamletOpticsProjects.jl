@@ -18,4 +18,8 @@ using Test
     include(joinpath(@__DIR__, "TestParticipants.jl"))
     include(joinpath(@__DIR__, "TestTeams.jl"))
     include(joinpath(@__DIR__, "TestGuards.jl"))
+    include(joinpath(@__DIR__, "TestCompose.jl"))
+    include(joinpath(@__DIR__, "TestClaims.jl"))
+    include(joinpath(@__DIR__, "TestWriteLock.jl"))
+    include(joinpath(@__DIR__, "TestTraceGroups.jl"))
 end

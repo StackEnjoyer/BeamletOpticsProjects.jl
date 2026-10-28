@@ -78,7 +78,7 @@ end
 """The hits and the power of every member of the system entry `s` of `p` that is a `Detector`, by id."""
 function _detector_readout(p::Project, s::SystemEntry)
     out = Dict{Symbol, @NamedTuple{hits::Int, power::Union{Nothing, Float64}}}()
-    for id in s.members
+    for id in _leaf_names(p, s.members)
         d = p[id]
         d isa BMO.Detector || continue
         n = BMO.hit_count(d)

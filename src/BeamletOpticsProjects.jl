@@ -14,6 +14,7 @@ using BeamletOptics
 using Dates: DateTime, unix2datetime
 using LibGit2
 using LinearAlgebra
+using Pkg: Pkg
 using SHA
 using TOML
 using UUIDs

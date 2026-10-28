@@ -114,14 +114,100 @@ function _project_toml(name, packages)
         v === nothing || (compat[id.name] = "= $v")
     end
     compat["julia"] = string(VERSION.major, ".", VERSION.minor)
+    toml = Dict{String, Any}("deps" => deps, "compat" => compat,
+        "beamletoptics" => Dict{String, Any}("format" => FORMAT))
+    sources = _sources(mods)
+    isempty(sources) || (toml["sources"] = sources)
     io = IOBuffer()
     println(io, "name = ", repr(name))
     println(io, "uuid = \"", uuid4(), "\"")
     println(io, "version = \"0.1.0\"")
     println(io)
-    TOML.print(io, Dict{String, Any}("deps" => deps, "compat" => compat,
-        "beamletoptics" => Dict{String, Any}("format" => FORMAT)); sorted = true)
+    TOML.print(io, toml; sorted = true)
     return String(take!(io))
+end
+
+"""
+The `[sources]` of a new project for the packages `mods` that do not come from a registry, such
+that `Pkg.instantiate()` in the project finds them on another machine too: for a package developed
+in a local git checkout (`Pkg.develop`) the url of its remote `origin` and its commit (a warning if
+the checkout has uncommitted changes, which the project then does not have), for a package added
+by url that url and the branch or commit it was added with. Empty for packages from a registry,
+which the exact versions of `[compat]` find, as for released versions.
+"""
+function _sources(mods)
+    deps = try
+        Pkg.dependencies()
+    catch
+        Dict{Base.UUID, Any}()
+    end
+    out = Dict{String, Any}()
+    for m in mods
+        id = Base.PkgId(m)
+        info = get(deps, id.uuid, nothing)
+        src = if isnothing(info)
+            # Not in the active environment (e.g. loaded from the stack): a git checkout or nothing
+            _checkout_source(pkgdir(m))
+        elseif info.is_tracking_registry
+            nothing
+        elseif info.is_tracking_path
+            _checkout_source(info.source)
+        elseif info.is_tracking_repo
+            Dict{String, Any}("url" => info.git_source, "rev" => info.git_revision)
+        end
+        isnothing(src) || (out[id.name] = src)
+    end
+    return out
+end
+
+# Whether the commit `oid` is on a branch of `origin` that the repository knows (as of its last fetch)
+function _pushed(repo, oid)
+    for ref in LibGit2.ref_list(repo)
+        startswith(ref, "refs/remotes/origin/") || continue
+        tip = LibGit2.with(r -> LibGit2.GitHash(r), LibGit2.GitReference(repo, ref))
+        (tip == oid || LibGit2.is_ancestor_of(string(oid), string(tip), repo)) && return true
+    end
+    return false
+end
+
+"""
+The url of the remote `origin` and the commit (`HEAD`) of the git checkout of the package in the
+folder `dir`, as an entry of `[sources]`, with `subdir` if the package is not at the root of the
+repository; `nothing` if `dir` is not in a git repository with an `origin` (a folder of
+`~/.julia/packages`, or a checkout that only exists on this machine, which warns).
+"""
+function _checkout_source(dir)
+    (isnothing(dir) || !isdir(dir)) && return nothing
+    # An installed version (not a checkout), even if a folder above it is a repository
+    installed = filter(isdir, [joinpath(d, "packages") for d in DEPOT_PATH])
+    any(p -> startswith(realpath(dir), realpath(p)), installed) && return nothing
+    repo = try
+        LibGit2.GitRepoExt(dir)
+    catch
+        return nothing
+    end
+    try
+        url = try
+            LibGit2.with(LibGit2.url, LibGit2.lookup_remote(repo, "origin"))
+        catch
+            nothing
+        end
+        if isnothing(url) || isempty(url)
+            @warn "$(basename(dir)) is developed in a checkout without a remote origin; the new project can not name its source"
+            return nothing
+        end
+        LibGit2.isdirty(repo) &&
+            @warn "$(basename(dir)) has uncommitted changes; the new project pins its last commit without them"
+        head = LibGit2.head_oid(repo)
+        _pushed(repo, head) ||
+            @warn "$(basename(dir)): the commit $(string(head)[1:7]) is not on origin; the new project can be installed elsewhere only after a push"
+        src = Dict{String, Any}("url" => url, "rev" => string(head))
+        sub = relpath(realpath(dir), realpath(LibGit2.workdir(repo)))
+        sub == "." || (src["subdir"] = replace(sub, '\\' => '/'))
+        return src
+    finally
+        close(repo)
+    end
 end
 
 _module_template(name) = """
@@ -164,9 +250,13 @@ _agents_template(name) = """
     - `src/$name.jl`: own code (module `$name`): functions that build components or groups, own
       types. Its exported names can be used in `system.jl`. The GUI never writes it.
     - `view.toml`, `*.bmo`, `.bmo/`: belong to the windows, see the skill `beamletopticsprojects`.
-    - `Project.toml`: the versions this project was made with (`[compat]`).
+    - `Project.toml`: the versions this project was made with (`[compat]`), and where to get the
+      packages that do not come from a registry (`[sources]`).
 
     ## Check
+
+    Run Julia in this folder in the environment of the project, `julia --project=.`. The first time
+    on a machine, install the versions it pins: `julia --project=. -e 'using Pkg; Pkg.instantiate()'`.
 
     ```julia
     using BeamletOptics, BeamletOpticsProjects

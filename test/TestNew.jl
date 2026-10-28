@@ -70,7 +70,8 @@ end
         @system S1 = [D1] sources = [B1]
         """)
     agents = read(joinpath(dir, "AGENTS.md"), String)
-    code = match(r"## Check\n+```julia\n(.*?)```"s, agents).captures[1]
+    code = match(r"## Check\n.*?```julia\n(.*?)```"s, agents).captures[1]
+    @test occursin("Pkg.instantiate()", agents)
     m = Module()
     text = redirect_stdout(devnull) do
         cd(() -> include_string(m, code), dir)
@@ -82,7 +83,10 @@ end
 @testset "new_project installs the skills of the packages once" begin
     skill(dir, name) = joinpath(dir, ".claude", "skills", name, "SKILL.md")
     dir = mktempdir()
-    @test_logs new_project(dir; name = "Example")   # silent
+    # The installers are silent (a warning about a checkout of this package with uncommitted
+    # changes, see `_checkout_source`, may come in a development environment)
+    logs, _ = Test.collect_test_logs(() -> new_project(dir; name = "Example"))
+    @test !any(l -> occursin("Installed", string(l.message)), logs)
     @test read(skill(dir, "beamletoptics"), String) ==
           read(joinpath(pkgdir(BeamletOptics), "skills", "beamletoptics", "SKILL.md"), String)
     @test read(skill(dir, "beamletopticsprojects"), String) ==
@@ -101,6 +105,48 @@ end
     new_project(dir; name = "Example")
     @test read(skill(dir, "beamletoptics"), String) == "mine"
     @test isfile(skill(dir, "beamletopticsprojects"))
+end
+
+@testset "[sources] for packages that do not come from a registry" begin
+    P = BeamletOpticsProjects
+    # A local checkout with an origin: its url and commit, the subdir of a package below the root
+    root = mktempdir()
+    repo = LibGit2.init(root)
+    LibGit2.with(r -> nothing, LibGit2.GitRemote(repo, "origin", "https://example.invalid/Pkg.jl"))
+    mkpath(joinpath(root, "lib", "Sub"))
+    write(joinpath(root, "lib", "Sub", "a.jl"), "x = 1\n")
+    LibGit2.add!(repo, "lib/Sub/a.jl")
+    sig = LibGit2.Signature("Test", "test@localhost")
+    head = string(LibGit2.commit(repo, "first"; author = sig, committer = sig))
+    # Not pushed yet: a warning; once origin has the commit: none
+    @test (@test_logs (:warn, r"not on origin") P._checkout_source(root))["rev"] == head
+    close(repo)
+    # As a fetch leaves it: the branch of origin at the commit
+    mkpath(joinpath(root, ".git", "refs", "remotes", "origin"))
+    write(joinpath(root, ".git", "refs", "remotes", "origin", "main"), head * "\n")
+    @test (@test_logs P._checkout_source(root)) ==
+          Dict("url" => "https://example.invalid/Pkg.jl", "rev" => head)
+    sub = P._checkout_source(joinpath(root, "lib", "Sub"))
+    @test sub["rev"] == head && sub["subdir"] == "lib/Sub"
+    # Uncommitted changes: the commit, with a warning
+    write(joinpath(root, "lib", "Sub", "a.jl"), "x = 2\n")
+    @test_logs (:warn, r"uncommitted changes") P._checkout_source(root)
+    # Without an origin: nothing, with a warning; an installed version or no repository: nothing
+    lone = mktempdir()
+    close(LibGit2.init(lone))
+    @test (@test_logs (:warn, r"without a remote origin") P._checkout_source(lone)) === nothing
+    @test P._checkout_source(mktempdir()) === nothing
+    @test P._checkout_source(joinpath(first(DEPOT_PATH), "packages")) === nothing
+    # A package from a registry gets no entry
+    @test isempty(P._sources([TOML]))
+    # BeamletOptics of the test environment is added by url: url and branch, also in Project.toml
+    src = P._sources([BeamletOptics])
+    @test src["BeamletOptics"]["url"] == "https://github.com/JuliaPhysics/BeamletOptics.jl"
+    @test haskey(src["BeamletOptics"], "rev")
+    dir = joinpath(mktempdir(), "Bench")
+    new_project(dir)
+    toml = TOML.parsefile(joinpath(dir, "Project.toml"))
+    @test toml["sources"]["BeamletOptics"] == src["BeamletOptics"]
 end
 
 end

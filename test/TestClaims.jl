@@ -64,7 +64,7 @@ end
         @test !haskey(claims(dir), "n1")
         @test claim!(dir; by = "ben@pc3", ids = [:N1])
         @test claims(dir)["n1"].by == "ben@pc3"
-        @test !any(f -> occursin(".stale-", f), readdir(joinpath(dir, ".bmo", "claims")))
+        @test !any(f -> occursin(".gone-", f), readdir(joinpath(dir, ".bmo", "claims")))
         release!(dir; by = "ben@pc3")
         leave(dir; name = "w1")
     end
@@ -127,6 +127,17 @@ end
         release!(dir; by = "anna@pc2")
     end
 
+    @testset "refresh = false leaves the presence alone" begin
+        announce(dir; name = "w2")
+        beat = TOML.parsefile(P.presence_file(dir, "w2@agent"))["beat"]
+        @test claim!(dir; by = "w2", ids = [:N1], refresh = false)
+        @test TOML.parsefile(P.presence_file(dir, "w2@agent"))["beat"] == beat
+        @test claim!(dir; by = "w2", ids = [:N1])
+        @test TOML.parsefile(P.presence_file(dir, "w2@agent"))["beat"] == beat + 1
+        release!(dir; by = "w2")
+        leave(dir; name = "w2")
+    end
+
     @testset "claims of a team draft" begin
         draft = fork_team(dir, "t1"; by = "lead")
         @test claim!(draft; by = "w1", ids = [:L9])
@@ -136,6 +147,125 @@ end
         release!(draft; by = "w1")
         @test isempty(claims(draft))
     end
+end
+
+"""Sets the time of `file` to `s` seconds ago."""
+function age!(file, s)
+    F = Base.Filesystem
+    f = F.open(file, F.JL_O_WRONLY)
+    t = time() - s
+    F.futime(f, t, t)
+    close(f)
+end
+
+"""Moves the line of `id` in the project folder `dir` to `y` and saves it as `by`."""
+function move_line!(dir, id, y; by)
+    p = load_project(dir)
+    i = findfirst(e -> e.name === id, p.entries)
+    e = p.entries[i]
+    p.entries[i] = Entry(e.kind, e.name, e.code, e.object; pos = (0.0, y, 0.0), e.rot, e.pose0,
+        e.meta, e.label, e.uid)
+    return save_project(p; by)
+end
+
+@testset "a line written by hand is compared by value" begin
+    dir = bench()
+    hand = """
+        @component K1 = $LENS pos = (0.1, 0, 0) rot = (0, 0, 90) uid = "k1"
+        @component K2 = $LENS pos = (0.2, 0, -0) rot = (0, -90, 0) uid = "k2"
+        @component K3 = $LENS pos = (0.3, 0, 0) rot = [1 0 0; 0 1 0; 0 0 1] uid = "k3"
+        @component K4 = $LENS pos = [0.4, 0, 0] rot = [0 -1 0; 1 0 0; 0 0 1] uid = "k4"
+        """
+    write(joinpath(dir, "system.jl"), read(joinpath(dir, "system.jl"), String) * hand)
+    old = read(joinpath(dir, "system.jl"), String)
+    @test claim!(dir; by = "w1", ids = [:K1, :K2, :K3, :K4])
+    # Another moves M1: the save writes the lines of K1...K4 in its own way, which is no change
+    move_line!(dir, :M1, 0.25; by = "ben@pc3")
+    new = read(joinpath(dir, "system.jl"), String)
+    @test occursin("K1 = $LENS pos = (0.1, 0.0, 0.0) rot = (0.0, 0.0, 90.0)", new)
+    @test occursin("K2 = $LENS pos = (0.2, 0.0, 0.0) rot = (0.0, -90.0, 0.0)", new)
+    # a matrix as angles, none for no rotation
+    @test occursin("K3 = $LENS pos = (0.3, 0.0, 0.0) uid", new)
+    @test occursin("K4 = $LENS pos = (0.4, 0.0, 0.0) rot = (0.0, 0.0, 90.0)", new)
+    @test P._changed_keys(old, new) == Set(["m1"])
+    # A change of the value is one
+    @test_throws r"K1 is claimed by w1" move_line!(dir, :K1, 0.15; by = "ben@pc3")
+    turned = replace(new, "90.0) uid = \"k1\"" => "91.0) uid = \"k1\"")
+    @test P._changed_keys(new, turned) == Set(["k1"])
+    @test P._changed_keys(new, replace(new, "(0.1, 0.0, 0.0)" => "(0.1, 0.0, 0.001)")) == Set(["k1"])
+    release!(dir; by = "w1")
+end
+
+@testset "a claim by readable id holds after the line got a machine id" begin
+    dir = bench()
+    write(joinpath(dir, "system.jl"), read(joinpath(dir, "system.jl"), String) *
+        "@component K1 = $LENS pos = (0.0, 0.4, 0.0)\n")
+    @test claim!(dir; by = "w1", ids = [:K1])
+    @test isfile(claim_file(dir, "id_K1"))
+    # Another save gives K1 a machine id
+    move_line!(dir, :N1, 0.35; by = "ben@pc3")
+    uid = P._line_uids(dir)[:K1]
+    @test claims(dir) == Dict(uid => (by = "w1", id = :K1))
+    @test !claim!(dir; by = "ben@pc3", ids = [:K1])
+    @test_throws r"K1 is claimed by w1" move_line!(dir, :K1, 0.45; by = "ben@pc3")
+    # The holder claims it again, by its machine id now, and releases both by the readable id
+    @test claim!(dir; by = "w1", ids = [:K1])
+    @test isfile(claim_file(dir, uid))
+    release!(dir; by = "w1", ids = [:K1])
+    @test !isfile(claim_file(dir, "id_K1")) && !isfile(claim_file(dir, uid))
+    @test isempty(claims(dir))
+end
+
+@testset "a claim of an agent whose name has other characters" begin
+    dir = bench()
+    name = "Claude (Opus 5.5)"
+    id = announce(dir; name)
+    @test id == "Claude__Opus_5.5_@agent"
+    beat = TOML.parsefile(P.presence_file(dir, id))["beat"]
+    @test claim!(dir; by = name, ids = [:L1])
+    # the claim refreshed the presence of the agent
+    @test TOML.parsefile(P.presence_file(dir, id))["beat"] == beat + 1
+    # alive by its presence, also long after the claim was written
+    age!(claim_file(dir, "l1"), 2 * P._CLAIM_GRACE)
+    @test haskey(claims(dir), "l1")
+    @test !claim!(dir; by = "ben@pc3", ids = [:L1])
+    @test_throws r"L1 is claimed by Claude" move_line!(dir, :L1, 0.15; by = "ben@pc3")
+    release!(dir; by = name)
+    leave(dir; name)
+end
+
+@testset "a claim is taken away only if it is still the one read" begin
+    dir = bench()
+    file = claim_file(dir, "l1")
+    # The claim of x, who is gone
+    @test claim!(dir; by = "x@pc9", ids = [:L1])
+    age!(file, 2 * P._CLAIM_GRACE)
+    @test P._claim_stale(dir, file)
+    # b takes it over; a, which found it stale before, comes late
+    @test claim!(dir; by = "b@pc2", ids = [:L1])
+    @test !P._take_away(file, f -> P._claim_stale(dir, f))
+    @test claims(dir)["l1"].by == "b@pc2"
+    # nor does a release of another take it
+    @test !P._take_away(file, f -> P._claim_by(f) == "a@pc1")
+    @test claims(dir)["l1"].by == "b@pc2"
+    @test !claim!(dir; by = "a@pc1", ids = [:L1])
+    release!(dir; by = "b@pc2")
+    @test !isfile(file)
+    @test !any(f -> occursin(".gone-", f), readdir(joinpath(dir, ".bmo", "claims")))
+end
+
+@testset "an unreadable claim file becomes stale" begin
+    dir = bench()
+    file = claim_file(dir, "m1")
+    mkpath(dirname(file))
+    # a writer that died between the exclusive create and the write (no hard links)
+    write(file, "")
+    @test !claim!(dir; by = "ben@pc3", ids = [:M1])
+    @test isempty(claims(dir))
+    age!(file, 2 * P._CLAIM_UNREADABLE)
+    @test claim!(dir; by = "ben@pc3", ids = [:M1])
+    @test claims(dir)["m1"].by == "ben@pc3"
+    release!(dir; by = "ben@pc3")
 end
 
 end

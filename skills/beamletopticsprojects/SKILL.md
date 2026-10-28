@@ -91,10 +91,11 @@ Several people may have the project open in their own windows while you work on 
 - Edit single lines of `system.jl`. Never rewrite the whole file from an older read: it would undo
   what the person did meanwhile. Read the file again after any failed edit.
 - `save_project(p; by = "claude")` writes the whole `system.jl` from a loaded project; it throws
-  `ProjectChanged` if the files changed since `p` was loaded. Then load the project again and redo
-  the change; never force it. With `by` (your `name`) it also throws an `ArgumentError` that names
-  the line and its holder if the save would change a line that another participant claimed; then
-  leave that line alone.
+  `ProjectChanged` if the files changed since `p` was loaded, or if another participant is saving
+  at that moment (it waits at most 2 s). Then load the project again and redo the change; never
+  force it. With `by` (your `name`) it also throws an `ArgumentError` that names the line and its
+  holder if the save would change a line that another participant claimed; then leave that line
+  alone.
 - Each window writes `.bmo/session-<person>.md`: the selection and the recent actions of its person.
   If Claude Code was started in the project folder, its hook (`.claude/settings.json`) shows them
   with every prompt; otherwise read `.bmo/session*.md` when a person refers to "this" or "what I just

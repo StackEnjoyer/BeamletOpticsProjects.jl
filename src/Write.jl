@@ -145,8 +145,8 @@ function euler_angles(R::AbstractMatrix)
 end
 
 """
-    save_project(project; packages = Module[], force = false) -> String
-    save_project(project, path; packages = Module[], force = false) -> String
+    save_project(project; packages = Module[], force = false, by = nothing) -> String
+    save_project(project, path; packages = Module[], force = false, by = nothing) -> String
 
 Writes `system.jl` of `project` (in the folder `path`, which becomes the folder of the project)
 and returns its path. A folder that is not a project yet gets the files of [`new_project`](@ref),
@@ -159,30 +159,37 @@ the `stamp` of `project` is that of the written files. Saving to another folder 
 check. With the participant `by` (see [`claim!`](@ref)), throws an `ArgumentError` and writes
 nothing if the save changes a line claimed by another participant.
 
-The check and the write happen under the lock `.bmo/write.lock` (`FileWatching.Pidfile.mkpidlock`,
-stale after 10 s), so of two participants that save at the same moment, the second sees the
-first's write and throws `ProjectChanged` instead of overwriting it. The age of a lock is compared
-with the clock of this machine: the clocks of the machines are assumed to agree within a few
-seconds (one Windows domain).
+The check and the write happen under the lock `.bmo/write.lock`, so of two participants that save
+at the same moment, the second sees the first's write and throws `ProjectChanged` instead of
+overwriting it. A save waits for the lock of another writer for at most 2 s and then throws
+`ProjectChanged` as well: that writer is writing, so load (or merge) and save again. A lock older
+than 10 s is of a writer that died and is taken over. Its age is compared with the clock of this
+machine: the clocks of the machines are assumed to agree within a few seconds (one Windows domain).
 """
 function save_project(p::Project; packages::Vector{Module} = Module[], force::Bool = false,
         by = nothing)
     mkpath(joinpath(p.path, ".bmo"))
     fresh = false
     file = project_file(p, "system.jl")
-    mkpidlock(joinpath(p.path, ".bmo", "write.lock"); stale_age = _WRITE_LOCK_STALE) do
+    _with_write_lock(p.path) do
+        files = _stamp_files(p.path)
         force || isnothing(p.stamp) || !isfile(file) ||
-            project_stamp(p.path) == p.stamp || throw(ProjectChanged(p.path))
+            _stamp(files) == p.stamp || throw(ProjectChanged(p.path))
         _give_uids!(p)
         fresh = !isfile(project_file(p, "Project.toml"))
         fresh && _scaffold(p.path, p.name, packages)
+        # The code of a new project is part of its stamp
+        fresh && (files = _stamp_files(p.path))
         # A project of the time before project files
         marker = project_marker(p.path)
         isfile(marker) || write(marker, _marker_text(splitext(basename(marker))[1]))
         text = system_code(p)
         isnothing(by) || _check_claims(p.path, String(by), text)
         _write_atomic(file, text)
-        p.stamp = project_stamp(p.path)
+        # The stamp of the text written, not of the files read again: agents edit the files
+        # without the lock, and an edit right after this write is not part of it
+        files["system.jl"] = Vector{UInt8}(text)
+        p.stamp = _stamp(files)
     end
     # A new project: its first version
     fresh && _first_version(p.path)
@@ -190,7 +197,127 @@ function save_project(p::Project; packages::Vector{Module} = Module[], force::Bo
 end
 
 # How old the write lock of a project may be before another writer takes it over [s]
-const _WRITE_LOCK_STALE = 10
+const _WRITE_LOCK_STALE = 10.0
+# How long a save waits for the write lock of another writer before it gives up [s]
+const _WRITE_LOCK_WAIT = 2.0
+
+"""
+Runs `f()` while this writer holds the write lock `.bmo/write.lock` of the project folder `dir`: a
+file created exclusively (see `_create_exclusive`) with a token of this writer, taken away after
+`f` if it is still this writer's. A lock written more than `_WRITE_LOCK_STALE` seconds ago (on the
+clock of this machine) is of a writer that died and is taken away. Throws
+[`ProjectChanged`](@ref) if another writer holds the lock for `wait` seconds: it is writing, so the
+files will have changed.
+"""
+function _with_write_lock(f, dir; wait::Real = _WRITE_LOCK_WAIT)
+    file = joinpath(dir, ".bmo", "write.lock")
+    token = string(gethostname(), " ", getpid(), " ", uuid4())
+    t0 = time()
+    while !_create_exclusive(file, token)
+        _lock_stale(file) && _take_away(file, _lock_stale) && continue
+        time() - t0 >= wait && throw(ProjectChanged(dir))
+        sleep(0.02)
+    end
+    try
+        return f()
+    finally
+        _take_away(file, l -> _read_text(l) == token)
+    end
+end
+
+# Whether the write lock `file` was written more than `_WRITE_LOCK_STALE` seconds ago
+_lock_stale(file) = isfile(file) && time() - mtime(file) > _WRITE_LOCK_STALE
+
+# The text of `file`, `nothing` if it can not be read
+function _read_text(file)
+    try
+        return read(file, String)
+    catch e
+        e isa InterruptException && rethrow()
+        return nothing
+    end
+end
+
+"""
+Creates `file` with `body` if it does not exist, such that it never exists without its body: the
+body goes into a temporary file of this writer first, which is then linked to `file` (a hard link
+fails if `file` exists). Falls back to an exclusive create where hard links are not supported.
+`true` if it was created, `false` if it existed.
+"""
+function _create_exclusive(file, body)
+    tmp = string(file, ".", getpid(), "-", rand(UInt32), ".tmp")
+    write(tmp, body)
+    try
+        hardlink(tmp, file)
+        return true
+    catch e
+        _exists_error(e) && return false
+        e isa Base.IOError || rethrow()
+        # No hard links on this file system: exclusive create, then write
+        F = Base.Filesystem
+        f = try
+            F.open(file, F.JL_O_CREAT | F.JL_O_EXCL | F.JL_O_WRONLY, 0o644)
+        catch e2
+            _exists_error(e2) && return false
+            rethrow()
+        end
+        try
+            write(f, body)
+        finally
+            close(f)
+        end
+        return true
+    finally
+        rm(tmp; force = true)
+    end
+end
+
+"""
+Takes the file `file` (a claim or the write lock) away if it is the one expected,
+`expected(path)` of the file at `path`, and returns whether it did. The file is checked after it
+was moved to a name of this writer, not when it was read before: another writer may have replaced
+it meanwhile (e.g. broken a stale claim and made its own), and that one is put back. Of several
+writers that take it away at once, exactly one moves it. Also removes what writers that died left
+of `file` this way, if it is expected.
+"""
+function _take_away(file, expected)
+    prefix = string(basename(file), ".gone-")
+    away = joinpath(dirname(file), string(prefix, getpid(), "-", rand(UInt32)))
+    for attempt in 1:10
+        try
+            Base.rename(file, away)
+            break
+        catch e
+            e isa Base.IOError || rethrow()
+            # Gone (another writer moved it), or a sharing violation of a network drive that lasts
+            (e.code == Base.UV_ENOENT || attempt == 10) && return false
+            sleep(0.05)
+        end
+    end
+    ok = expected(away)
+    ok || _put_back(away, file)
+    rm(away; force = true)
+    if ok
+        for f in readdir(dirname(file); join = true)
+            startswith(basename(f), prefix) && expected(f) && rm(f; force = true)
+        end
+    end
+    return ok
+end
+
+# Puts the file at `away` back to `file`, unless a new `file` was made meanwhile
+function _put_back(away, file)
+    try
+        hardlink(away, file)
+    catch e
+        _exists_error(e) && return nothing
+        e isa Base.IOError || rethrow()
+        # No hard links on this file system
+        body = _read_text(away)
+        isnothing(body) || _create_exclusive(file, body)
+    end
+    return nothing
+end
 
 function save_project(p::Project, path::AbstractString; packages::Vector{Module} = Module[],
         force::Bool = false, by = nothing)

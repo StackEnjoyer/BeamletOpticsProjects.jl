@@ -11,24 +11,34 @@ and every `.jl` file in `src/`, with their paths. It changes with any change of 
 GUI's own files (`view.toml`) do not count, nor do files and folders in `src/` whose name starts
 with `.` (e.g. the `._X.jl` that macOS leaves on network drives).
 """
-function project_stamp(dir::AbstractString)
-    dir = abspath(dir)
-    files = String[]
-    isfile(joinpath(dir, "system.jl")) && push!(files, "system.jl")
+project_stamp(dir::AbstractString) = _stamp(_stamp_files(abspath(dir)))
+
+# The files of the stamp of the project folder `dir` (see `project_stamp`): their paths relative to
+# `dir`, with `/`, => their content
+function _stamp_files(dir)
+    files = Dict{String, Vector{UInt8}}()
+    system = joinpath(dir, "system.jl")
+    isfile(system) && (files["system.jl"] = read(system))
     src = joinpath(dir, "src")
     if isdir(src)
         for (root, dirs, names) in walkdir(src)
             filter!(d -> !startswith(d, '.'), dirs)
             for f in names
-                startswith(f, '.') && continue
-                endswith(f, ".jl") && push!(files, relpath(joinpath(root, f), dir))
+                (startswith(f, '.') || !endswith(f, ".jl")) && continue
+                path = joinpath(root, f)
+                files[replace(relpath(path, dir), '\\' => '/')] = read(path)
             end
         end
     end
+    return files
+end
+
+# The stamp of the files `files` (see `_stamp_files`)
+function _stamp(files::AbstractDict)
     ctx = SHA.SHA1_CTX()
-    for f in sort!(replace.(files, '\\' => '/'))
+    for f in sort!(collect(keys(files)))
         SHA.update!(ctx, codeunits(f * "\0"))
-        SHA.update!(ctx, read(joinpath(dir, f)))
+        SHA.update!(ctx, files[f])
         SHA.update!(ctx, codeunits("\0"))
     end
     return bytes2hex(SHA.digest!(ctx))

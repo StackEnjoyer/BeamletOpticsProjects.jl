@@ -72,4 +72,31 @@ end
     @test m.stamp == project_stamp(dir)
 end
 
+const P = BeamletOpticsProjects
+# What happens right after `_write_atomic` renamed a file into place
+const AFTER_RENAME = Ref{Any}(Returns(nothing))
+
+@testset "the stamp of a save is that of the text it wrote" begin
+    dir = mktempdir()
+    new_project(dir; name = "Bench")
+    lens = "@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5)\n"
+    write(joinpath(dir, "system.jl"), lens)
+    p = load_project(dir)
+    agent = lens * "@component L2 = SphericalLens(0.1, -0.1, 0.005, 0.0254, 1.5)\n"
+    # An agent's edit (without the lock) lands right after the save renamed system.jl into place
+    @eval P _rename(from, to; force = true) = (Base.rename(from, to); $(AFTER_RENAME)[](to); nothing)
+    try
+        AFTER_RENAME[] = to -> endswith(to, "system.jl") && write(to, agent)
+        save_project(p)
+    finally
+        AFTER_RENAME[] = Returns(nothing)
+        @eval P _rename(from, to; force = true) = Base.rename(from, to)
+    end
+    @test read(joinpath(dir, "system.jl"), String) == agent
+    # the edit is not part of the save: the next save sees it instead of overwriting it
+    @test p.stamp != project_stamp(dir)
+    @test_throws ProjectChanged save_project(p)
+    @test read(joinpath(dir, "system.jl"), String) == agent
+end
+
 end

@@ -48,4 +48,53 @@ lens(id, y) = "@component $id = $LENS pos = (0.0, $y, 0.0) uid = \"$(lowercase(S
     @test !isfile(joinpath(dir, ".bmo", "write.lock"))
 end
 
+"""Sets the time of `file` to `s` seconds ago."""
+function age!(file, s)
+    F = Base.Filesystem
+    f = F.open(file, F.JL_O_WRONLY)
+    t = time() - s
+    F.futime(f, t, t)
+    close(f)
+end
+
+@testset "the write lock of another writer" begin
+    dir = joinpath(mktempdir(), "Bench")
+    mkpath(joinpath(dir, ".bmo"))
+    write(joinpath(dir, "Project.toml"), "name = \"Bench\"\n")
+    write(joinpath(dir, "system.jl"), lens(:L1, 0.1) * "\n")
+    lock = joinpath(dir, ".bmo", "write.lock")
+    p = load_project(dir)
+    # compiled before the times are measured
+    save_project(p)
+    before = read(joinpath(dir, "system.jl"), String)
+    # held (e.g. by a writer on another machine): the save waits about 2 s, then ProjectChanged
+    write(lock, "pc3 1234 x")
+    t = @elapsed err = try
+        save_project(p)
+        nothing
+    catch e
+        e
+    end
+    @test err isa ProjectChanged && err.path == dir
+    @test 1.9 < t < 4
+    @test read(joinpath(dir, "system.jl"), String) == before
+    @test read(lock, String) == "pc3 1234 x"
+    # released while the save waits: it saves
+    task = @async (sleep(0.3); rm(lock))
+    save_project(p)
+    wait(task)
+    @test !isfile(lock) && p.stamp == project_stamp(dir)
+    # of a writer that died: taken over after 10 s, also from another machine
+    write(lock, "pc3 1234 x")
+    age!(lock, 11)
+    @test (@elapsed save_project(p)) < 1.5
+    @test !isfile(lock)
+    @test !any(f -> occursin("write.lock", f), readdir(joinpath(dir, ".bmo")))
+    # a fresh lock that another put in place after a writer found the old one stale: kept
+    write(lock, "pc2 5678 y")
+    @test !BeamletOpticsProjects._take_away(lock, BeamletOpticsProjects._lock_stale)
+    @test read(lock, String) == "pc2 5678 y"
+    @test !any(f -> occursin("write.lock.gone-", f), readdir(joinpath(dir, ".bmo")))
+end
+
 end

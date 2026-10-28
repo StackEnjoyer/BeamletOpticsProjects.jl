@@ -392,9 +392,9 @@ function _parse_lines(text)
                 if k === :uid
                     uid = v isa AbstractString ? String(v) : string(v)
                 elseif k in (:pos, :rot)
-                    pose[k] = string(v)
+                    pose[k] = _value_text(v)
                 else
-                    rest[k] = string(v)
+                    rest[k] = _value_text(v)
                 end
             end
             push!(lines, _Line(ex.args[1], args[1].args[1], uid, _line_code(args[1].args[2]),
@@ -436,5 +436,30 @@ function _system_changes(old, new)
 end
 
 _line_code(@nospecialize(ex)) = ex isa Union{Expr, Symbol} ? string(normalize_code(ex)) : repr(ex)
+
+"""
+The text of the value `v` of a keyword of a line, the same for the same value however it is
+written: a number, also in a tuple or vector, as `save_project` writes it (`(0.1, 0.0, 0.0)` for
+`(0.1, 0, 0)`), anything else as code.
+"""
+function _value_text(@nospecialize(v))
+    x = _number_value(v)
+    isnothing(x) || return _float_string(x)
+    if v isa Expr && v.head in (:tuple, :vect)
+        t = map(_number_value, v.args)
+        any(isnothing, t) || return _tuple_string(t)
+    end
+    return _line_code(v)
+end
+
+# The number that the expression `v` is (also `-1`), `nothing` for any other expression
+function _number_value(@nospecialize(v))
+    v isa Real && !(v isa Bool) && return v
+    if v isa Expr && v.head === :call && length(v.args) == 2 && v.args[1] in (:-, :+)
+        x = _number_value(v.args[2])
+        isnothing(x) || return v.args[1] === :- ? -x : x
+    end
+    return nothing
+end
 
 const _SUMMARY_KINDS = (:added, :removed, :renamed, :moved, :changed)

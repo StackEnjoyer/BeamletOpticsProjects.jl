@@ -63,12 +63,13 @@ but not exported are qualified: `BeamletOpticsProjects.install_agent_skill()`.
   (`"claude-w1"`); `announce` does not invent ids. `written` (the stamp of the files, by which the
   windows name the writer of a change) is published only with `wrote = true`, right after writing;
   otherwise the earlier `written` is kept. `leave(dir; name)` deletes the file.
-- `claim!(dir; by, ids::Vector{Symbol}) -> Bool` claims the objects of the ids in the live project
-  (`dir = "."`) or in a draft, in sorted order; of two participants that want the same object one
-  gets it; on `false` none of the ids is held. Kept by the machine id of the line; alive as long
-  as the presence of `by` (the announced `name`), which `claim!` refreshes. `release!(dir; by,
-  ids = nothing)` releases those ids, or all of `by`. `claims(dir)` lists the alive claims, machine
-  id => `(by, id)`.
+- `claim!(dir; by, ids::Vector{Symbol}, refresh = true) -> Bool` claims the objects of the ids in
+  the live project (`dir = "."`) or in a draft, in sorted order; of two participants that want the
+  same object one gets it; on `false` none of the ids is held. Kept by the machine id of the line
+  (a claim made while its line had none counts for that line once it has one); alive as long as
+  the presence of `by` (the announced `name`), which `claim!` refreshes unless `refresh = false`.
+  `release!(dir; by, ids = nothing)` releases those ids, or all of `by`. `claims(dir)` lists the
+  alive claims, machine id => `(by, id)`.
 - `save_project(p; by)` throws an `ArgumentError` (and writes nothing) if it changes a line that
   another participant claimed.
 - `post!(team; by, kind, text, data)` makes an entry visible on the `board` only when complete.

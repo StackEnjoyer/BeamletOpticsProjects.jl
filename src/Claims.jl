@@ -7,6 +7,9 @@ drive), named by the machine id of the line; it is alive while its holder's pres
 # A claim of a holder without a presence file (e.g. an agent that never announced) counts that
 # long after its file was written [s]
 const _CLAIM_GRACE = 120.0
+# A claim file that can not be read (of a writer that died while it created it without hard links)
+# is stale that long after it was written [s]
+const _CLAIM_UNREADABLE = 5.0
 
 """
 The folder of the claims of the project or team draft in the folder `dir`: `claims/` of a draft
@@ -19,20 +22,32 @@ _claims_dir(dir) = isfile(joinpath(dir, "team.toml")) ? joinpath(dir, "claims") 
 _presence_dir(dir) = isfile(joinpath(dir, "team.toml")) ? dirname(dirname(dirname(dir))) : dir
 
 # The participant id of `by`: as given if it has a host (`"anna@pc2"`), else an agent (`"w1@agent"`,
-# see `announce`)
-_holder_id(by) = occursin('@', by) ? String(by) : string(by, "@agent")
+# see `announce`); characters outside `[A-Za-z0-9_.@-]` replaced by `_`, as in the names of the
+# presence files
+_holder_id(by) = occursin('@', by) ? _file_part(by) : _participant_id(String(by), "agent")
+
+# The machine ids of the lines of `system.jl` in the folder `dir` by their readable id, read from
+# the text without running it
+function _line_uids(dir)
+    file = joinpath(dir, "system.jl")
+    lines = isfile(file) ? _parse_lines(read(file, String)) : nothing
+    uid = Dict{Symbol, String}()
+    isnothing(lines) || foreach(l -> isnothing(l.uid) || (uid[l.name] = l.uid), lines[1])
+    return uid
+end
 
 """
 The keys (the machine id, else `"id:L1"`) of the readable ids `ids` in `system.jl` of the folder
 `dir`, read from the text without running it; an id that is not a line there keeps `"id:<id>"`.
 """
-function _claim_keys(dir, ids)
-    file = joinpath(dir, "system.jl")
-    lines = isfile(file) ? _parse_lines(read(file, String)) : nothing
-    uid = Dict{Symbol, String}()
-    isnothing(lines) || foreach(l -> isnothing(l.uid) || (uid[l.name] = l.uid), lines[1])
-    return Dict{Symbol, String}(id => get(uid, id, "id:" * String(id)) for id in ids)
-end
+_claim_keys(dir, ids) = _uid_keys(ids, _line_uids(dir))
+_uid_keys(ids, uids) =
+    Dict{Symbol, String}(id => get(uids, id, "id:" * String(id)) for id in ids)
+
+# The key of the line that the claim key `key` stands for now: a claim `"id:L5"`, made while L5 had
+# no machine id, is one of the line L5 of the file (its machine ids `uids`, see `_line_uids`) once
+# that line has one
+_claim_key(key, uids) = startswith(key, "id:") ? get(uids, Symbol(key[4:end]), key) : key
 
 _claim_file(cdir, key) = joinpath(cdir, _file_part(key) * ".toml")
 
@@ -48,6 +63,9 @@ function _claim_read(file)
         return nothing
     end
 end
+
+# The holder of the claim file `file`, `nothing` while it is unreadable
+_claim_by(file) = (c = _claim_read(file); isnothing(c) ? nothing : c.by)
 
 """
 Whether the claim file `file` of the holder `by` is alive: its holder's presence file in the project
@@ -70,55 +88,44 @@ function _claim_alive(pdir, file, by)
 end
 
 """
-Creates the claim file `file` with `body` if it does not exist, such that it never exists without
-its holder: the body goes into a temporary file of this writer first, which is then linked to
-`file` (a hard link fails if `file` exists). Falls back to an exclusive create where hard links
-are not supported. `true` if it was created, `false` if it existed.
+Whether the claim file `file` is stale, with the presences in the project folder `pdir`: its
+holder is gone (see `_claim_alive`), or it can not be read and was written more than
+`_CLAIM_UNREADABLE` seconds ago (by a writer that died while it created the file).
 """
-function _claim_create(file, body)
-    tmp = string(file, ".", getpid(), "-", rand(UInt32), ".tmp")
-    write(tmp, body)
-    try
-        hardlink(tmp, file)
-        return true
-    catch e
-        _exists_error(e) && return false
-        e isa Base.IOError || rethrow()
-        # No hard links on this file system: exclusive create, then write
-        F = Base.Filesystem
-        f = try
-            F.open(file, F.JL_O_CREAT | F.JL_O_EXCL | F.JL_O_WRONLY, 0o644)
-        catch e2
-            _exists_error(e2) && return false
-            rethrow()
-        end
-        try
-            write(f, body)
-        finally
-            close(f)
-        end
-        return true
-    finally
-        rm(tmp; force = true)
-    end
+function _claim_stale(pdir, file)
+    isfile(file) || return false
+    c = _claim_read(file)
+    isnothing(c) && return time() - mtime(file) > _CLAIM_UNREADABLE
+    return !_claim_alive(pdir, file, c.by)
 end
 
-# Takes away the stale claim file `file`: of several that do it at once, exactly one moves it
-function _claim_break(file)
-    try
-        Base.rename(file, string(file, ".stale-", getpid(), "-", rand(UInt32)))
+# Whether the claim file `file` exists and is of a holder other than `by` who is there
+function _held_by_other(pdir, file, by)
+    isfile(file) || return false
+    c = _claim_read(file)
+    return !isnothing(c) && c.by != by && _claim_alive(pdir, file, c.by)
+end
+
+# Writes the time of the existing file `file` anew (never creates it); `false` if it is gone
+function _touch_existing(file)
+    F = Base.Filesystem
+    f = try
+        F.open(file, F.JL_O_WRONLY)
     catch e
         e isa Base.IOError || rethrow()
         return false
     end
-    for f in readdir(dirname(file); join = true)
-        occursin(".stale-", f) && rm(f; force = true)
+    try
+        t = time()
+        F.futime(f, t, t)
+    finally
+        close(f)
     end
     return true
 end
 
 """
-    claim!(dir; by, ids) -> Bool
+    claim!(dir; by, ids, refresh = true) -> Bool
 
 Claims the objects of the readable ids `ids` (e.g. `[:L1, :M2]`, the lines that the participant
 `by` is going to change) in the project or team draft in the folder `dir`: `true` if all of them
@@ -131,11 +138,12 @@ renamed. Of two participants that claim the same object at the same time exactly
 objects are claimed in sorted order, so this also holds for overlapping `ids`. A claim lives as
 long as its holder's presence (see [`announce`](@ref)): one of a participant who is gone is taken
 over. `by` is the participant id of the presence (`"anna@pc2"`) or the `name` an agent announced
-with (`"w1"`); a claim also refreshes the agent's presence. Windows of people refuse to change an
-object claimed by someone else, and [`save_project`](@ref) with `by` refuses to write its line.
+with (`"w1"`); with `refresh`, a claim also writes the presence file of `by` again (a window, which
+writes its presence itself, passes `false`). Windows of people refuse to change an object claimed
+by someone else, and [`save_project`](@ref) with `by` refuses to write its line.
 See [`release!`](@ref), [`claims`](@ref).
 """
-function claim!(dir::AbstractString; by, ids::Vector{Symbol})
+function claim!(dir::AbstractString; by, ids::Vector{Symbol}, refresh::Bool = true)
     dir = abspath(dir)
     cdir = _claims_dir(dir)
     pdir = _presence_dir(dir)
@@ -149,25 +157,33 @@ function claim!(dir::AbstractString; by, ids::Vector{Symbol})
         file = _claim_file(cdir, key)
         body = sprint(TOML.print, Dict("by" => by, "id" => String(id), "key" => key))
         taken = false
-        for _ in 1:2
-            if _claim_create(file, body)
+        for _ in 1:3
+            if _create_exclusive(file, body)
                 push!(made, file)
                 taken = true
                 break
             end
             c = _claim_read(file)
-            # An unreadable claim is one that is being written or taken away: not ours
-            isnothing(c) && break
-            c.by == by && (taken = true; touch(file); break)
-            _claim_alive(pdir, file, c.by) && break
-            _claim_break(file)
+            if !isnothing(c) && c.by == by
+                # Held already: refreshed, unless it went meanwhile
+                _touch_existing(file) && (taken = true; break)
+                continue
+            end
+            # Gone meanwhile: create it
+            isfile(file) || continue
+            # Held by another who is there, or being written: not ours
+            _claim_stale(pdir, file) || break
+            _take_away(file, f -> _claim_stale(pdir, f))
         end
+        # A claim of the line by its readable id, made before the line had a machine id
+        taken && !startswith(key, "id:") &&
+            _held_by_other(pdir, _claim_file(cdir, "id:" * String(id)), by) && (taken = false)
         if !taken
-            foreach(f -> rm(f; force = true), made)
+            foreach(f -> _take_away(f, g -> _claim_by(g) == by), made)
             return false
         end
     end
-    _refresh_presence(pdir, by)
+    refresh && _refresh_presence(pdir, by)
     return true
 end
 
@@ -196,12 +212,15 @@ function release!(dir::AbstractString; by, ids = nothing)
     cdir = _claims_dir(dir)
     isdir(cdir) || return nothing
     by = String(by)
-    keys = isnothing(ids) ? nothing : Set(values(_claim_keys(dir, collect(Symbol, ids))))
+    uids = isnothing(ids) ? nothing : _line_uids(dir)
+    keys = isnothing(ids) ? nothing : Set(values(_uid_keys(collect(Symbol, ids), uids)))
     for f in readdir(cdir; join = true)
         endswith(f, ".toml") || continue
         c = _claim_read(f)
         (isnothing(c) || c.by != by) && continue
-        (isnothing(keys) || c.key in keys) && rm(f; force = true)
+        (isnothing(keys) || c.key in keys || _claim_key(c.key, uids) in keys) || continue
+        # Only if it is still this one: another may have taken it over meanwhile
+        _take_away(f, g -> _claim_by(g) == by)
     end
     return nothing
 end
@@ -211,7 +230,8 @@ end
 
 The claims of the project or team draft in the folder `dir` whose holders are still there, by the
 machine id of their line (`"id:L1"` for a line without one): the participant `by` and the readable
-id `id` at the time of the claim. See [`claim!`](@ref).
+id `id` at the time of the claim. A claim made while its line had no machine id counts for the
+line of its readable id once that line has one. See [`claim!`](@ref).
 """
 function claims(dir::AbstractString)
     dir = abspath(dir)
@@ -219,18 +239,32 @@ function claims(dir::AbstractString)
     pdir = _presence_dir(dir)
     out = Dict{String, @NamedTuple{by::String, id::Symbol}}()
     isdir(cdir) || return out
+    # The claims by readable id, after those by machine id
+    byid = Pair{String, @NamedTuple{by::String, id::Symbol}}[]
+    uids = nothing
     for f in readdir(cdir; join = true)
         (endswith(f, ".toml") && !startswith(basename(f), ".")) || continue
         c = _claim_read(f)
         (isnothing(c) || isempty(c.key)) && continue
-        _claim_alive(pdir, f, c.by) && (out[c.key] = (by = c.by, id = c.id))
+        _claim_alive(pdir, f, c.by) || continue
+        if startswith(c.key, "id:")
+            isnothing(uids) && (uids = _line_uids(dir))
+            push!(byid, _claim_key(c.key, uids) => (by = c.by, id = c.id))
+        else
+            out[c.key] = (by = c.by, id = c.id)
+        end
+    end
+    for (k, v) in byid
+        haskey(out, k) || (out[k] = v)
     end
     return out
 end
 
 """
 The keys of the lines (entries, systems, groups) that the text `new` of `system.jl` changes, adds
-or removes compared with the text `old`, by the machine id (`"id:L1"` without one).
+or removes compared with the text `old`, by the machine id (`"id:L1"` without one). Lines are
+compared by value: a line that `save_project` writes in its own way (`(0.1, 0.0, 0.0)` for
+`(0.1, 0, 0)`, no `rot` for a rotation of zero) is not changed.
 """
 function _changed_keys(old, new)
     a, b = _parse_lines(old), _parse_lines(new)
@@ -239,10 +273,43 @@ function _changed_keys(old, new)
     pairs, added, removed = _pair(a[1], b[1])
     out = Set{String}(key(l) for l in Iterators.flatten((added, removed)))
     for (o, n) in pairs
-        (o.name == n.name && o.macroname == n.macroname && o.code == n.code && o.pose == n.pose &&
-         o.rest == n.rest) || push!(out, key(o))
+        _same_line(o, n) || push!(out, key(o))
     end
     return out
+end
+
+# Whether the lines `o` and `n` (see `_parse_lines`) are the same but for the machine id, the
+# rotations within `_ROT_TOL`
+function _same_line(o::_Line, n::_Line)
+    (o.name == n.name && o.macroname == n.macroname && o.code == n.code && o.rest == n.rest) ||
+        return false
+    get(o.pose, :pos, nothing) == get(n.pose, :pos, nothing) || return false
+    a, b = get(o.pose, :rot, nothing), get(n.pose, :rot, nothing)
+    a == b && return true
+    A, B = _rot_value(a), _rot_value(b)
+    return !isnothing(A) && !isnothing(B) && maximum(abs, A - B) <= _ROT_TOL
+end
+
+# The rotation matrix of the text `s` of a `rot` (`nothing`: none), `nothing` if it is not written
+# with numbers (angles or a matrix)
+function _rot_value(s)
+    isnothing(s) && return rotation_matrix(nothing)
+    ex = Meta.parse(s; raise = false)
+    ex isa Expr || return nothing
+    if ex.head === :tuple
+        t = map(_number_value, ex.args)
+        (length(t) == 3 && !any(isnothing, t)) || return nothing
+        return rotation_matrix(Tuple(Float64.(t)))
+    elseif ex.head === :vcat && length(ex.args) == 3
+        rows = map(ex.args) do r
+            r isa Expr && r.head === :row || return nothing
+            v = map(_number_value, r.args)
+            (length(v) == 3 && !any(isnothing, v)) ? Float64.(v) : nothing
+        end
+        any(isnothing, rows) && return nothing
+        return permutedims(reduce(hcat, rows))
+    end
+    return nothing
 end
 
 """

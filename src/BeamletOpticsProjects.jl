@@ -12,7 +12,6 @@ module BeamletOpticsProjects
 
 using BeamletOptics
 using Dates: DateTime, unix2datetime
-using FileWatching.Pidfile: mkpidlock
 using LibGit2
 using LinearAlgebra
 using Pkg: Pkg

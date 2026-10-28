@@ -25,6 +25,12 @@ function system_code(p::Project)
 end
 
 function _entry_line(e::Entry)
+    bad = _nonfinite(e.pos, e.rot)
+    isnothing(bad) && return _entry_text(e)
+    throw(ArgumentError("$bad of `$(e.name)` is not finite, the project is not written"))
+end
+
+function _entry_text(e::Entry)
     io = IOBuffer()
     print(io, "@", e.kind, " ", e.name, " = ", _code_string(e.code))
     e.pos === nothing || print(io, " pos = ", _tuple_string(e.pos))

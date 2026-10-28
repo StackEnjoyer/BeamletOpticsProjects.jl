@@ -129,6 +129,8 @@ function _register_entry!(kind::Symbol, name::Symbol, code, @nospecialize(obj), 
     p !== nothing && _taken(p, name) &&
         throw(ArgumentError("$where: the name `$name` is used twice"))
     p === nothing || _check_uid(p, uid, where)
+    bad = _nonfinite(pos, rot)
+    isnothing(bad) || throw(ArgumentError("$where: $bad of `$name` is not finite: $(bad == "pos" ? pos : rot)"))
     pose0 = pose_of(obj)
     apply_pose!(obj, pos, rot)
     p === nothing || push!(p.entries, Entry(kind, name, code, obj; pos, rot, pose0, meta, label, uid))

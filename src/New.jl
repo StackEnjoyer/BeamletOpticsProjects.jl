@@ -193,14 +193,14 @@ function _checkout_source(dir)
             nothing
         end
         if isnothing(url) || isempty(url)
-            @warn "$(basename(dir)) is developed in a checkout without a remote origin; the new project can not name its source"
+            @warn "$(last(splitpath(dir))) is developed in a checkout without a remote origin; the new project can not name its source"
             return nothing
         end
         LibGit2.isdirty(repo) &&
-            @warn "$(basename(dir)) has uncommitted changes; the new project pins its last commit without them"
+            @warn "$(last(splitpath(dir))) has uncommitted changes; the new project pins its last commit without them"
         head = LibGit2.head_oid(repo)
         _pushed(repo, head) ||
-            @warn "$(basename(dir)): the commit $(string(head)[1:7]) is not on origin; the new project can be installed elsewhere only after a push"
+            @warn "$(last(splitpath(dir))): the commit $(string(head)[1:7]) is not on origin; the new project can be installed elsewhere only after a push"
         src = Dict{String, Any}("url" => url, "rev" => string(head))
         sub = relpath(realpath(dir), realpath(LibGit2.workdir(repo)))
         sub == "." || (src["subdir"] = replace(sub, '\\' => '/'))

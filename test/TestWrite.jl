@@ -49,6 +49,24 @@ end
     @test P.euler_angles(rotation_matrix((10.0, 90.0, 0.0))) === nothing
 end
 
+@testset "a pose that is not finite is neither written nor loaded" begin
+    # It would differ from itself in every comparison: every window would see the object changed
+    @test_throws r"rot of `A` is not finite" line(entry(:A, fill(NaN, 3, 3)))
+    @test_throws r"rot of `A` is not finite" line(entry(:A, (NaN, NaN, NaN)))
+    @test_throws r"pos of `A` is not finite" line(entry(:A, nothing; pos = (0.0, Inf, 0.0)))
+    dir = mktempdir()
+    new_project(dir; name = "Bench")
+    write(joinpath(dir, "system.jl"),
+        "@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5) pos = (0.0, 0.1, 0.0) rot = (NaN, NaN, NaN)\n")
+    e = try
+        load_project(dir)
+    catch e
+        e
+    end
+    msg = sprint(showerror, e isa LoadError ? e.error : e)
+    @test occursin("system.jl:1", msg) && occursin("rot of `L1` is not finite", msg)
+end
+
 @testset "code and meta" begin
     e = Entry(:component, :L1, "SphericalLens(0.05, -0.05, 0.005, 0.0254, λ -> 1.5)", lens();
         pos = (0.0, -0.0, 1e-6), pose0 = P.pose_of(lens()),

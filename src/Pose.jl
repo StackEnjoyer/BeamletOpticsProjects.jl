@@ -37,6 +37,17 @@ function apply_pose!(@nospecialize(obj), pos, rot)
 end
 
 """
+The part of the pose `pos`, `rot` of a line that is not finite (`"pos"` or `"rot"`, e.g. `NaN`),
+else `nothing`. Such a pose is never written nor loaded: it would differ from itself in every
+comparison, so every window would see the object as changed.
+"""
+function _nonfinite(pos, rot)
+    pos === nothing || all(x -> x isa Real && isfinite(x), pos) || return "pos"
+    rot === nothing || all(x -> x isa Real && isfinite(x), rot) || return "rot"
+    return nothing
+end
+
+"""
     frame(x) -> Matrix{Float64}
 
 The orientation of `x`; for things with only a direction (beams) a right-handed orthonormal

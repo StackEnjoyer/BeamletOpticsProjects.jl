@@ -66,7 +66,11 @@ Bench/
 4) Change single lines of `system.jl` (form: `FORMAT.md`) or code in `src/<Name>.jl`. Give a new line
    the next free id of its prefix (`next_id(p, "L")`), without `uid`. A `@group` line (a group of
    the window) lists its members, which keep their own lines; systems list the group, not its
-   members (rules in `FORMAT.md`).
+   members (rules in `FORMAT.md`). To move or rotate several objects together (components,
+   sources, groups with their members), use `move!(".", [:G1, :FIOS1]; offset = (0.3, 0, 0),
+   rot = (0, 0, 10), pivot = :center, by = "claude")` instead of editing their lines one by one:
+   one write, the rotation about the pivot (default: the mean of their positions, as a selection
+   of several in the window) before the offset, claims respected; the window shows it as one move.
 5) Check: `p = load_project(".")`, then `r = trace(p, :S1)`: `r.detectors[:D1].hits`,
    `r.detectors[:D1].power` [W], `r.segments` (the `path_segments` of the sources: `start`, `stop`,
    `object`, ...). `look(p)` again to see the chains. Report the numbers; what counts as good is the

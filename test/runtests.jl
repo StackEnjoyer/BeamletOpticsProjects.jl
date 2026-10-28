@@ -22,4 +22,5 @@ using Test
     include(joinpath(@__DIR__, "TestClaims.jl"))
     include(joinpath(@__DIR__, "TestWriteLock.jl"))
     include(joinpath(@__DIR__, "TestTraceGroups.jl"))
+    include(joinpath(@__DIR__, "TestMove.jl"))
 end

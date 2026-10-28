@@ -116,6 +116,55 @@ function _merged_set(base::Project, mine::Project, theirs::Project, f, xb, xm, x
     return Set{String}(get(own, k, k) for k in setdiff(union(m, setdiff(t, b)), setdiff(b, t)))
 end
 
+"""
+The memberships of the entries, sources and groups of the keys `follow` as one side has them
+(`theirs` if `of_theirs`, else `mine`): the systems and groups of the merged state (those of `take`
+as in `theirs`, those of `merged` with their merged members and sources, the others as in `mine`)
+in which one of them is a member while that side has it not there, or the other way round, with
+their members and sources made so, `key => (; members, sources)` as in `merged`. One that the side
+removed is a member nowhere then. The membership of an object belongs to it: a conflict at an entry
+holds its places in the systems and groups too, not only its line.
+"""
+function _follow_members(base::Project, mine::Project, theirs::Project, take, merged, follow,
+        of_theirs::Bool)
+    out = Dict{String, @NamedTuple{members::Set{String}, sources::Set{String}}}()
+    isempty(follow) && return out
+    km, kt = _member_keys(base, mine), _member_keys(base, theirs)
+    kms, kts = _base_keys(base.systems, mine.systems), _base_keys(base.groups, mine.groups)
+    tss, tgs = _base_keys(base.systems, theirs.systems), _base_keys(base.groups, theirs.groups)
+    tobase, own = Dict{String, String}(), Dict{String, String}()
+    for (p, ks) in ((theirs, kt), (mine, km)), x in Iterators.flatten((p.entries, p.groups))
+        tobase[_merge_key(x)] = ks[x.name]
+        own[ks[x.name]] = _merge_key(x)
+    end
+    base_of(keys) = Set{String}(get(tobase, x, x) for x in keys)
+    # The systems and groups of the side and of the merged state: key => (members, sources)
+    holds(p, ks, sk, gk) = merge(
+        Dict(sk[s.name] => (_keys_of(ks, s.members), _keys_of(ks, s.sources)) for s in p.systems),
+        Dict(gk[g.name] => (_keys_of(ks, g.members), Set{String}()) for g in p.groups))
+    side = of_theirs ? holds(theirs, kt, tss, tgs) : holds(mine, km, kms, kts)
+    now = Dict{String, Tuple{Set{String}, Set{String}}}()
+    for (k, v) in holds(mine, km, kms, kts)
+        k in take || (now[k] = v)
+    end
+    for (k, v) in holds(theirs, kt, tss, tgs)
+        k in take && (now[k] = v)
+    end
+    for (k, m) in merged
+        haskey(now, k) && (now[k] = (base_of(m.members), base_of(m.sources)))
+    end
+    f = Set{String}(get(tobase, x, x) for x in follow)
+    for (k, (members, sources)) in now
+        sm, ss = get(side, k, (Set{String}(), Set{String}()))
+        want_m = union(setdiff(members, f), intersect(sm, f))
+        want_s = union(setdiff(sources, f), intersect(ss, f))
+        (want_m == members && want_s == sources) && continue
+        out[k] = (; members = Set{String}(get(own, x, x) for x in want_m),
+            sources = Set{String}(get(own, x, x) for x in want_s))
+    end
+    return out
+end
+
 # The prefix of a readable id, e.g. "BS" of `BS12`
 function _id_prefix_of(name::Symbol)
     m = match(r"^(.*?)\d+$", String(name))
@@ -159,7 +208,7 @@ function _shared_sources(base::Project, mine::Project, theirs::Project, take, me
     end
     for s in theirs.systems
         k = kt[s.name]
-        k in take && foreach(src -> hold!(src, k), _keys_of(kt, s.sources))
+        k in take && !haskey(merged, k) && foreach(src -> hold!(src, k), _keys_of(kt, s.sources))
     end
     for (k, m) in merged
         foreach(src -> hold!(src, k), Set{String}(get(tobase, x, x) for x in m.sources))
@@ -192,7 +241,9 @@ function _tree_conflicts(base::Project, mine::Project, theirs::Project, take, me
     end
     for (isgroup, xs) in ((false, theirs.systems), (true, theirs.groups)), x in xs
         k = kt[x.name]
-        k in take && (held[k] = (isgroup, _keys_of(kt, x.members)))
+        k in take || continue
+        held[k] = (isgroup, haskey(merged, k) ? Set{String}(get(tobase, m, m) for m in merged[k].members) :
+                            _keys_of(kt, x.members))
     end
     groups = Set{String}(k for (k, (isgroup, _)) in held if isgroup)
     known = union(Set{String}(km[g.name] for g in mine.groups), Set{String}(kt[g.name] for g in theirs.groups),
@@ -231,7 +282,11 @@ and the live project). Entries, systems and groups are compared by their keys: t
 - `merged`: the systems and groups that both changed only in their members (and sources), which is
   no conflict: their members and sources merged as sets of keys of entries and groups,
   `key => (; members, sources)`, each `(mine ∪ (theirs − base)) − (base − theirs)`, e.g. both added
-  a lens to `S1`; the `sources` of a group are empty.
+  a lens to `S1`; the `sources` of a group are empty. The places of the `conflicts` in the systems
+  and groups are part of them and stay as in `mine`: a system or group (also one of `take`, whose
+  other changes are taken) whose members would hold one of them where `mine` has it not, or the
+  other way round, is in `merged` too, with them as in `mine`. E.g. `theirs` removed `L1` from `S1`
+  and `mine` moved `L1`: `L1` stays a member of `S1` until the conflict is decided.
 - `renames`: the entries, systems and groups of `take` that `theirs` added or renamed to a readable
   id that another one of `mine` has already, by key, with the next free id of the same prefix;
   the caller adds them under that id, and the systems refer to them by it.
@@ -262,14 +317,22 @@ function merge_plan(base::Project, mine::Project, theirs::Project; stale = key -
     take = setdiff(theirs_keys, conflicts, keys(merged))
     # A source in two systems, an entry in two groups, or one in a group and in a system: all are
     # conflicts (each round sets back systems and groups to the state of mine)
+    pinned = merged
     while true
+        # The places of the conflicts in the systems and groups stay as in mine; the rules hold
+        # with and without them (e.g. a system whose merged members lose an entry to a group in
+        # conflict stays a conflict, also if keeping that group in it looks whole)
+        pinned = merge(merged, _follow_members(base, mine, theirs, take, merged, conflicts, false))
         shared = setdiff(union(_shared_sources(base, mine, theirs, take, merged),
-            _tree_conflicts(base, mine, theirs, take, merged)), conflicts)
+            _tree_conflicts(base, mine, theirs, take, merged),
+            _shared_sources(base, mine, theirs, take, pinned),
+            _tree_conflicts(base, mine, theirs, take, pinned)), conflicts)
         isempty(shared) && break
         append!(conflicts, sort!(collect(shared)))
         foreach(k -> delete!(merged, k), shared)
         take = setdiff(theirs_keys, conflicts, keys(merged))
     end
+    merged = pinned
     added = Dict{String, Any}(_change_key(c) => c.new for c in Iterators.flatten((d.entries, d.systems, d.groups))
                               if c.kind in (:added, :renamed) && _change_key(c) in take)
     renames = _renumbered(base, mine, theirs, sort!(collect(added); by = first))
@@ -320,7 +383,9 @@ what `theirs` does not have), those of `mine` elsewhere. `mine` stays as it is. 
 [`merge_plan`](@ref): the machine id, or `"id:L1"` for a line without one; the key of a line is the
 same in all three states. Systems and groups refer to their members by key, so a system of `mine`
 holds an entry of `theirs` and a group of `theirs` holds the entries of `mine`; members that are
-gone are left out.
+gone are left out. The places of the entries, sources and groups of `keys` in the systems and
+groups belong to them: each is a member exactly where `theirs` has it (nowhere if `theirs` has it
+not), the other members of those systems and groups stay as in `mine`.
 
 The keys are widened where the result would break a rule otherwise: a system of `mine` that would
 hold a source that a system of `theirs` at `keys` holds (a source belongs to at most one system),
@@ -343,8 +408,11 @@ save_project(r.project)
 """
 function compose(base::Project, mine::Project, theirs::Project, keys)
     take = Set{String}(String(k) for k in keys)
-    merged = Dict{String, @NamedTuple{members::Set{String}, sources::Set{String}}}()
+    none = Dict{String, @NamedTuple{members::Set{String}, sources::Set{String}}}()
+    merged = none
     while true
+        # The objects of `keys` are members where `theirs` has them, see `_follow_members`
+        merged = _follow_members(base, mine, theirs, take, none, take, true)
         bad = union(_shared_sources(base, mine, theirs, take, merged),
             _tree_conflicts(base, mine, theirs, take, merged))
         wider = setdiff(bad, take)

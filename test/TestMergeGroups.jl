@@ -146,4 +146,21 @@ end
     @test occursin("G1 (L1, M1)", text)
 end
 
+@testset "a draft removes an entry that the project moved (F18)" begin
+    dir = folder(lens(:L1, 0.1), lens(:L2, 0.2), beam(:B1), sys(:S1, ["L1", "L2"]))
+    draft = fork_team(dir, "t1"; by = "anna")
+    # the draft removes L1 and adds L3 to S1
+    write(joinpath(draft, "system.jl"), join([lens(:L2, 0.2), lens(:L3, 0.3), beam(:B1),
+        sys(:S1, ["L2", "L3"])], "\n") * "\n")
+    # meanwhile the project moves L1
+    write(joinpath(dir, "system.jl"), join([lens(:L1, 0.15), lens(:L2, 0.2), beam(:B1),
+        sys(:S1, ["L1", "L2"])], "\n") * "\n")
+    r = merge_draft!(dir, "t1")
+    @test r.conflicts == ["l1"]
+    p = load_project(dir)
+    @test p.entries[findfirst(e -> e.name === :L1, p.entries)].pos[2] == 0.15
+    # L1 keeps its place in S1, the member that the draft added comes
+    @test Set(only(p.systems).members) == Set([:L1, :L2, :L3])
+end
+
 end

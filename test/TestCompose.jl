@@ -119,6 +119,45 @@ grp(p, id) = only(g for g in p.groups if g.name === id)
         @test only(e for e in r.project.entries if e.uid == "their-l2").name === :L2
         @test !any(e -> e.uid == "mine-l2", r.project.entries)
     end
+
+    @testset "the places of an entry in conflict come with it (F18)" begin
+        # (a) mine removed L2 (also from S1) and added L5 to S1, theirs moved L2
+        base = project(lens(:L1, 0.1), lens(:L2, 0.2), beam(:B1), sys(:S1, [:L1, :L2], [:B1]))
+        mine = project(lens(:L1, 0.1), lens(:L5, 0.5), beam(:B1), sys(:S1, [:L1, :L5], [:B1]))
+        theirs = project(lens(:L1, 0.1), lens(:L2, 0.25), beam(:B1), sys(:S1, [:L1, :L2], [:B1]))
+        r = compose(base, mine, theirs, ["l2"])
+        @test r.keys == ["l2"]
+        @test y(r.project, :L2) == 0.25
+        @test Set(system(r.project, :S1).members) == Set([:L1, :L2, :L5])
+        # (b) theirs removed L1 (also from S1), mine moved L1 and added L5 to S1
+        mine = project(lens(:L1, 0.15), lens(:L2, 0.2), lens(:L5, 0.5), beam(:B1), sys(:S1, [:L1, :L2, :L5], [:B1]))
+        theirs = project(lens(:L2, 0.2), beam(:B1), sys(:S1, [:L2], [:B1]))
+        r = compose(base, mine, theirs, ["l1"])
+        @test !any(e -> e.name === :L1, r.project.entries)
+        @test system(r.project, :S1).members == [:L2, :L5]
+        # moved into another system by theirs: there, and no longer in the one of mine
+        base = project(lens(:L1, 0.1), lens(:L2, 0.2), beam(:B1), sys(:S1, [:L1, :L2], [:B1]), sys(:S2, [:L1]))
+        mine = project(lens(:L1, 0.1), lens(:L2, 0.2), beam(:B1), sys(:S1, [:L1, :L2], [:B1]), sys(:S2, [:L1]))
+        theirs = project(lens(:L1, 0.1), lens(:L2, 0.3), beam(:B1), sys(:S1, [:L1], [:B1]), sys(:S2, [:L1, :L2]))
+        r = compose(base, mine, theirs, ["l2"])
+        @test system(r.project, :S1).members == [:L1]
+        @test Set(system(r.project, :S2).members) == Set([:L1, :L2])
+    end
+
+    @testset "the places of a source and of a member of a group come with them (F18)" begin
+        base = project(lens(:L1, 0.1), lens(:L2, 0.2), beam(:B1), group(:G1, [:L1, :L2], 0.15), sys(:S1, [:G1], [:B1]))
+        # mine removed L2 and B1, theirs moved both
+        mine = project(lens(:L1, 0.1), group(:G1, [:L1], 0.15), sys(:S1, [:G1]))
+        theirs = project(lens(:L1, 0.1), lens(:L2, 0.3), beam(:B1, 0.01), group(:G1, [:L1, :L2], 0.15),
+            sys(:S1, [:G1], [:B1]))
+        r = compose(base, mine, theirs, ["l2", "b1"])
+        @test r.keys == ["b1", "l2"]
+        @test grp(r.project, :G1).members == [:L1, :L2]
+        @test system(r.project, :S1).sources == [:B1]
+        save_project(r.project)
+        p = load_project(mine.path)
+        @test grp(p, :G1).members == [:L1, :L2] && system(p, :S1).sources == [:B1]
+    end
 end
 
 end

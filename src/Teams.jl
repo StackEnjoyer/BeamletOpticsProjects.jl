@@ -263,44 +263,52 @@ function _apply_plan!(live::Project, base::Project, draft::Project, plan)
                             vcat(filter(in(set), seen), setdiff(collect(set), seen)))
     from_draft(k, ds) = (k, _with_name(ds, get(plan.renames, k, ds.name)),
         _names_to_keys(draft, dkeys, ds.members, dgkeys), _names_to_keys(draft, dkeys, ds.sources))
+    function merged_system(x, lm, ls)
+        haskey(plan.merged, x[1]) || return x
+        m = plan.merged[x[1]]
+        return (x[1], x[2], order(m.members, x[3], lm), order(m.sources, x[4], ls))
+    end
     for (i, s) in enumerate(live.systems)
         k = lskeys[i]
         lm, ls = _names_to_keys(live, lkeys, s.members, lgkeys), _names_to_keys(live, lkeys, s.sources)
         j = findfirst(==(k), dskeys)
-        if haskey(plan.merged, k)
+        if k in take
+            # As in the draft, with the merged members of one that keeps the places of conflicts
+            isnothing(j) || push!(syss, merged_system(from_draft(k, draft.systems[j]), lm, ls))
+        elseif haskey(plan.merged, k)
             m = plan.merged[k]
             _, _, dm, dsrc = isnothing(j) ? (k, s, String[], String[]) : from_draft(k, draft.systems[j])
             push!(syss, (k, s, order(m.members, lm, dm), order(m.sources, ls, dsrc)))
-        elseif k in take
-            isnothing(j) || push!(syss, from_draft(k, draft.systems[j]))
         else
             push!(syss, (k, s, lm, ls))
         end
     end
     for (j, ds) in enumerate(draft.systems)
         k = dskeys[j]
-        k in take && !(k in lskeys) && push!(syss, from_draft(k, ds))
+        k in take && !(k in lskeys) && push!(syss, merged_system(from_draft(k, ds), String[], String[]))
     end
     # The groups with their keys, the own key of the group in its file and the keys of their members
     grps = Tuple{String, String, GroupEntry, Vector{String}}[]
     group_from_draft(k, dg) = (k, _merge_key(dg), _with_name(dg, get(plan.renames, k, dg.name)),
         _names_to_keys(draft, dkeys, dg.members, dgkeys))
+    merged_group(x, lm) = haskey(plan.merged, x[1]) ?
+                          (x[1], x[2], x[3], order(plan.merged[x[1]].members, x[4], lm)) : x
     for (i, g) in enumerate(live.groups)
         k = lgkeys[i]
         lm = _names_to_keys(live, lkeys, g.members, lgkeys)
         j = findfirst(==(k), dgkeys)
-        if haskey(plan.merged, k)
+        if k in take
+            isnothing(j) || push!(grps, merged_group(group_from_draft(k, draft.groups[j]), lm))
+        elseif haskey(plan.merged, k)
             dm = isnothing(j) ? String[] : last(group_from_draft(k, draft.groups[j]))
             push!(grps, (k, _merge_key(g), g, order(plan.merged[k].members, lm, dm)))
-        elseif k in take
-            isnothing(j) || push!(grps, group_from_draft(k, draft.groups[j]))
         else
             push!(grps, (k, _merge_key(g), g, lm))
         end
     end
     for (j, dg) in enumerate(draft.groups)
         k = dgkeys[j]
-        k in take && !(k in lgkeys) && push!(grps, group_from_draft(k, dg))
+        k in take && !(k in lgkeys) && push!(grps, merged_group(group_from_draft(k, dg), String[]))
     end
     function id_of(key)
         i = something(findfirst(x -> x[1] == key, ents), findfirst(x -> x[2] == key, ents), 0)

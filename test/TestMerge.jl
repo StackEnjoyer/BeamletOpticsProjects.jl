@@ -137,6 +137,20 @@ const BASE = (lens(:L1, 0.1), beam(:B1), sys(:S1, ["L1"]))
         plan = P.merge_plan(base0, base0, theirs)
         @test plan.take == Set(["id:L1"])
     end
+
+    @testset "a conflict keeps its places as in mine (F18)" begin
+        # theirs removed L1 (also from S1) and relabeled S1, mine moved L1
+        base2 = project(BASE[1:2]..., lens(:L2, 0.2), sys(:S1, ["L1", "L2"]))
+        mine = project(lens(:L1, 0.15), BASE[2], lens(:L2, 0.2), sys(:S1, ["L1", "L2"]))
+        theirs = project(BASE[2], lens(:L2, 0.2), sys(:S1, ["L2"]; rest = " label = \"b\""))
+        plan = P.merge_plan(base2, mine, theirs)
+        @test plan.conflicts == ["l1"]
+        @test "s1" in plan.take && plan.merged["s1"].members == Set(["l1", "l2"])
+        # without the conflict nothing is pinned
+        mine = project(BASE[1:2]..., lens(:L2, 0.2), sys(:S1, ["L1", "L2"]))
+        plan = P.merge_plan(base2, mine, theirs)
+        @test isempty(plan.conflicts) && isempty(plan.merged) && "s1" in plan.take
+    end
 end
 
 end

@@ -23,4 +23,6 @@ using Test
     include(joinpath(@__DIR__, "TestWriteLock.jl"))
     include(joinpath(@__DIR__, "TestTraceGroups.jl"))
     include(joinpath(@__DIR__, "TestMove.jl"))
+    include(joinpath(@__DIR__, "TestQuery.jl"))
+    include(joinpath(@__DIR__, "TestEdit.jl"))
 end

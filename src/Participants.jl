@@ -227,6 +227,34 @@ function announce(dir::AbstractString; name, doing = "", selected_id = "", ttl =
 end
 
 """
+Announces a write of the participant `by` to the project in the folder `dir` right after it (see
+[`announce`](@ref) with `wrote = true`), with `doing` (e.g. "added M19") and `selected_id` (`nothing`:
+as before), keeping the `ttl` and `kind` of its presence file if it has one: the writes of this
+package that take `by` (`add!`, `move!`, ...) call it, so that the windows name the participant at
+the change without an `announce` of its own. Nothing without `by`. An error of writing the presence
+is no error of the write, which is done: it is logged.
+"""
+function _announce_wrote(dir::AbstractString, by, doing::AbstractString; selected_id = nothing)
+    isnothing(by) && return nothing
+    old = try
+        TOML.parsefile(presence_file(dir, _participant_id(String(by), "agent")))
+    catch
+        Dict{String, Any}()
+    end
+    ttl = get(old, "ttl", 120)
+    kind = _presence_string(old, "kind")
+    try
+        announce(dir; name = String(by), doing, wrote = true, ttl = ttl isa Real ? ttl : 120,
+            kind = isempty(kind) ? "agent" : kind,
+            selected_id = something(selected_id, _presence_string(old, "selected_id")))
+    catch e
+        (e isa Base.IOError || e isa SystemError) || rethrow()
+        @warn "the write is done, but its announce failed" exception = e
+    end
+    return nothing
+end
+
+"""
     leave(dir; name)
 
 Ends taking part in the project in the folder `dir`: deletes the presence file that

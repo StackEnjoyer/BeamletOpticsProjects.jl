@@ -81,6 +81,40 @@ end
         @test trace(p, :S1).detectors[:D2].power === 0.0
     end
 
+    @testset "ids of the objects hit" begin
+        r = trace(p, :S1)
+        @test length(r.ids) == length(r.segments)
+        @test r.ids isa Vector{Union{Nothing, Symbol}}
+        @test r.ids == [seg.object === p[:L1] ? :L1 : seg.object === p[:D1] ? :D1 : nothing
+                        for seg in r.segments]
+        @test :L1 in r.ids && r.ids[end] === :D1
+        # a final segment without a hit
+        r = trace(p, :S2)
+        @test r.ids[end] === nothing
+        @test isempty(trace(p, :S3).ids)
+    end
+
+    @testset "an object inside a group is named by its outermost group" begin
+        g = bench(replace(SYSTEM, "@system S2 = [L1, D1]" => "@system S2 = [G2, D1]", "@system S1 = [L1, D1, D2] sources = [B1]" =>
+            "@group G1 = [L1, D2] pos = (0.0, 0.1, 0.0)\n@group G2 = [G1] pos = (0.0, 0.1, 0.0)\n@system S1 = [G2, D1] sources = [B1]"))
+        r = trace(g, :S1)
+        @test :G2 in r.ids
+        @test !(:L1 in r.ids) && !(:G1 in r.ids)
+        @test r.ids[end] === :D1
+    end
+
+    @testset "warnings of the solve" begin
+        @test trace(p, :S1).warnings == String[]
+        # the collector records warnings in order and swallows them
+        l = BeamletOpticsProjects._WarningCollector()
+        Base.CoreLogging.with_logger(l) do
+            @info "not recorded"
+            @warn "first"
+            @error "second"
+        end
+        @test l.messages == ["first (Main.TestTrace)", "second (Main.TestTrace)"]
+    end
+
     @test_throws KeyError trace(p, :S9)
 
     @testset "in the expression that loads the project" begin

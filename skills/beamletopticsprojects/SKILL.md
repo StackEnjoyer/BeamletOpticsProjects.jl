@@ -69,17 +69,37 @@ Bench/
 3) Announce yourself (`announce`, see "Taking part") with the id you work on, and claim the ids of
    the lines you are going to change: `claim!("."; by = "claude", ids = [:L2])`. On `false`
    someone else is working on one of them: choose other work or ask the person.
-4) Change single lines of `system.jl` (form: `FORMAT.md`) or code in `src/<Name>.jl`. Give a new line
-   the next free id of its prefix (`next_id(p, "L")`), without `uid`. A `@group` line (a group of
-   the window) lists its members, which keep their own lines; systems list the group, not its
-   members (rules in `FORMAT.md`). To move or rotate several objects together (components,
-   sources, groups with their members), use `move!(".", [:G1, :FIOS1]; offset = (0.3, 0, 0),
-   rot = (0, 0, 10), pivot = :center, by = "claude")` instead of editing their lines one by one:
-   one write, the rotation about the pivot (default: the mean of their positions, as a selection
-   of several in the window) before the offset, claims respected; the window shows it as one move.
+4) Change the setup with the writes of the package, not by editing `system.jl` as text. Each
+   checks the changed lines before it writes (the code builds, poses are finite, ids are free,
+   systems and groups stay whole; else an `ArgumentError` naming the id and nothing is written),
+   writes once under the write lock, respects claims, and with `by` tells the windows that you
+   wrote it ("claude: added M19"), without an `announce` of yours:
+   - `id = add!(".", "RoundPlanoMirror(0.0254, 0.006)"; pos = (0.1, 0.2, 0), rot = (0, 0, 45),
+     label = "fold", systems = [:S1], by = "claude")`: picks the next free id of its prefix in the
+     same write (no other participant can take it meanwhile) and returns it; a source goes into
+     the `sources` of one system.
+   - `set!(".", :L9; pos, rot, code, label, by)` changes only the given fields of a line (a group:
+     its label; move groups with `move!`).
+   - `move!(".", [:G1, :FIOS1]; offset = (0.3, 0, 0), rot = (0, 0, 10), pivot = :center, by)` moves
+     and rotates components, sources, groups with their members and systems with their members and
+     sources by one rigid motion (rotation about the pivot, default the mean of the positions, then
+     the offset); the window shows it as one move.
+   - `new = duplicate!(".", [:M19, :L1]; rot = (0, 0, -90), pivot = :M19, offset, systems = :same,
+     by)` copies lines (a group with its members) by the same rigid motion and returns the new ids.
+   - `remove!(".", [:M20]; by)` removes lines with their places in systems and groups.
+   Read with `members(p, :S1)`, `sources(p, :S1)` and `pose(p, :TM2)` (`pos`, `rot` as a matrix,
+   as the line has it: `set!(".", :TM2; pos, rot)` puts a remembered pose back). Code in
+   `src/<Name>.jl` and anything these do not cover (form: `FORMAT.md`) is edited as text: then
+   give a new line `next_id(p, "L")` and no `uid`; a `@group` line lists its members, systems list
+   the group, not its members.
 5) Check: `p = load_project(".")`, then `r = trace(p, :S1)`: `r.detectors[:D1].hits`,
    `r.detectors[:D1].power` [W], `r.segments` (the `path_segments` of the sources: `start`, `stop`,
-   `object`, ...). `look(p)` again to see the chains. Report the numbers; what counts as good is the
+   `object`, ...) with `r.ids[i]`, the id of the object hit at the end of `r.segments[i]`
+   (`nothing`: no hit), and `r.warnings`, what BeamletOptics warned about during the solve (e.g. a
+   Lagrange invariant violation: the beamlet model is out of its range, the numbers are not to be
+   trusted). `look(p)` again to see the chains. For a scan of many steps that nobody needs to
+   watch, trace moved copies in memory instead of writing each step: `trace(moved(p, [:TM2];
+   offset = (2e-8, 0, 0)), :S1)` writes nothing. Report the numbers; what counts as good is the
    user's decision. Two things to say when you report them: the hits of rays (`Beam`) have no power
    (`power` is `nothing`, `look` prints `rays, no power`), it is not 0 W; and `trace` solves only the
    sources of that system, so a detector that is a member of several systems shows only the hits of

@@ -20,8 +20,11 @@ the pivot of each group), the id of a component, source or group (its position),
 
 A group moves with all its members, also those of the groups inside it, and its pivot and
 orientation move with them. An id inside a group must be given with its group (or a group around
-it); the members of a group are never moved alone, which would break the group. Unknown ids and
-ids of systems throw an `ArgumentError` naming the id.
+it); the members of a group are never moved alone, which would break the group. Unknown ids
+throw an `ArgumentError` naming the id.
+
+An id of a system stands for its members and sources (as listed by the `@system` line, groups as
+groups); an object named twice, e.g. by a system and by one of its members, moves once.
 
 The write is one [`save_project`](@ref) with the participant `by`: it throws an `ArgumentError`
 if it would change a line claimed by another participant (see [`claim!`](@ref)) and
@@ -41,6 +44,7 @@ function move!(dir::AbstractString, ids::Vector{Symbol}; offset = (0, 0, 0), rot
     p = load_project(dir)
     _move!(p, ids; offset, rot, pivot)
     save_project(p; by)
+    _announce_wrote(p.path, by, "moved " * join(ids, ", "); selected_id = String(first(ids)))
     return load_project(p.path)
 end
 
@@ -53,7 +57,7 @@ function _move!(p::Project, ids::Vector{Symbol}; offset = (0, 0, 0), rot = nothi
     length(offset) == 3 || throw(ArgumentError("offset needs three numbers, got $(length(offset))"))
     t = Float64[offset[1], offset[2], offset[3]]
     R = rot === nothing ? nothing : rotation_matrix(rot)
-    sel = unique(ids)
+    sel = _expand_systems(p, ids)
     foreach(id -> _move_kind(p, id), sel)
     # A member of a group only with its group (or a group around it)
     parents = _group_parents(p)
@@ -96,12 +100,30 @@ function _move!(p::Project, ids::Vector{Symbol}; offset = (0, 0, 0), rot = nothi
     return p
 end
 
+"""
+`ids` with every system replaced by its members and sources (in this order), each id once, in the
+order of first appearance.
+"""
+function _expand_systems(p::Project, ids::Vector{Symbol})
+    out = Symbol[]
+    for id in ids
+        i = findfirst(s -> s.name === id, p.systems)
+        if isnothing(i)
+            push!(out, id)
+        else
+            append!(out, p.systems[i].members)
+            append!(out, p.systems[i].sources)
+        end
+    end
+    return unique(out)
+end
+
 """`:entry` or `:group` for the id `id` of `p`; throws for a system or an unknown id."""
 function _move_kind(p::Project, id::Symbol)
     any(e -> e.name === id, p.entries) && return :entry
     any(g -> g.name === id, p.groups) && return :group
     any(s -> s.name === id, p.systems) &&
-        throw(ArgumentError("`$id` is a system; move! moves components, sources and groups"))
+        throw(ArgumentError("`$id` is a system, not a component, source or group"))
     throw(ArgumentError("unknown id `$id`: no component, source or group of the project"))
 end
 

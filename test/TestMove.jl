@@ -125,12 +125,36 @@ end
         @test maximum(abs, collect(entry(e, :F1).pos) - [0.0, 0.2, 0.0]) ≤ 1e-15
     end
 
+    @testset "system ids stand for their members and sources" begin
+        dir = bench()
+        a = load_project(dir)
+        # S1 = [G2, D1] sources = [B1]: they move about the mean of the positions of the three
+        b = move!(dir, [:S1]; offset = (0.0, 0.01, 0.0), rot = (0, 0, 20))
+        c = (collect(group(a, :G2).pos) + line_pos(entry(a, :D1)) + line_pos(entry(a, :B1))) / 3
+        rigid(a, b, [:G2, :G1, :L1, :M1, :M2, :D1, :B1], c, rotation_matrix((0, 0, 20)), [0.0, 0.01, 0.0])
+        unchanged(a, b, [:F1, :K1])
+
+        # a system and one of its members together: the member moves once
+        dir = bench()
+        b = move!(dir, [:S2, :D1]; offset = (0.0, 0.0, 0.5))
+        @test entry(b, :D1).pos == (0.0, 0.3, 0.5)
+        @test entry(b, :F1).pos == (0.2, 0.0, 0.5)
+        # S1 and S2 share D1, which also moves once
+        dir = bench()
+        b = move!(dir, [:S1, :S2]; offset = (0.0, 0.0, 0.5))
+        @test entry(b, :D1).pos == (0.0, 0.3, 0.5)
+        @test maximum(abs, collect(entry(b, :B1).pos) - [0.0, -0.05, 0.5]) ≤ 1e-15
+        @test collect(group(b, :G2).pos) ≈ [0.05, 0.2, 0.5]
+        # a member inside a group still needs its group, also next to a system
+        dir = bench()
+        @test occursin("G1", message(() -> move!(dir, [:S2, :L1])))
+    end
+
     @testset "errors name the id" begin
         dir = bench()
         before = read(joinpath(dir, "system.jl"), String)
         @test_throws ArgumentError move!(dir, [:X9])
         @test occursin("X9", message(() -> move!(dir, [:F1, :X9])))
-        @test occursin("S1", message(() -> move!(dir, [:S1])))
         @test occursin("Q7", message(() -> move!(dir, [:F1]; pivot = :Q7)))
         # a member without its group
         m = message(() -> move!(dir, [:L1]))

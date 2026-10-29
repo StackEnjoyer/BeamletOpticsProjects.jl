@@ -23,7 +23,9 @@ but not exported are qualified: `BeamletOpticsProjects.install_agent_skill()`.
 | Category | Names |
 |---|---|
 | Load and save | `load_project`, `save_project`, `new_project`, `Project`, `Entry`, `SystemEntry`, `GroupEntry`, `system_code`, `project_file`, `project_marker`, `project_dir`, `project_stamp`, `ProjectChanged` |
-| The form of `system.jl` | `@component`, `@source`, `@group`, `@system`, `id_prefix`, `next_id`, `apply_pose!`, `rotation_matrix`, `move!` |
+| The form of `system.jl` | `@component`, `@source`, `@group`, `@system`, `id_prefix`, `next_id`, `apply_pose!`, `rotation_matrix` |
+| Change lines (checked, one write) | `add!`, `set!`, `move!`, `duplicate!`, `remove!` |
+| Read lines | `members`, `sources`, `pose`, `moved` |
 | Trace and read | `trace`, `look` |
 | Versions and changes | `save_version`, `versions`, `version_summary`, `diff_projects`, `EntryChange`, `SystemChange`, `GroupChange`, `copy_code` |
 | Participants and claims | `announce`, `leave`, `claim!`, `release!`, `claims` |
@@ -42,7 +44,8 @@ but not exported are qualified: `BeamletOpticsProjects.install_agent_skill()`.
 ## `trace` and `look`
 
 - `trace(p, :S1; flen = 0.1)` initializes the system (its detectors are emptied), solves each source
-  of its `@system` line and returns `segments` and `detectors` (`hits`, `power` [W] per member that
+  of its `@system` line and returns `segments`, `ids` (one per segment: the id of the object hit at
+  its end, `nothing` without a hit), `warnings` (what BeamletOptics warned about) and `detectors` (`hits`, `power` [W] per member that
   is a `Detector`; `power` is `nothing` for the hits of rays, which carry none: not 0 W). Only the
   sources of that system are solved: a detector in several systems holds only their hits, while the
   window superposes the hits of all systems that share it. Tracing again gives the same segments

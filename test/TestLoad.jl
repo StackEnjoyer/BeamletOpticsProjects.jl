@@ -106,6 +106,21 @@ end
     @test_throws ArgumentError load_project(mktempdir())
 end
 
+@testset "a file half written by another participant is loaded again" begin
+    whole = "# header\n@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5)\n"
+    dir = project_dir(whole[1:end-30])
+    file = joinpath(dir, "system.jl")
+    # the writer finishes while the first load fails
+    writer = @async (sleep(0.1); write(file, whole))
+    p = load_project(dir)
+    wait(writer)
+    @test only(p.entries).name === :L1
+    # a file that stays broken throws, after one wait
+    write(file, whole[1:end-30])
+    t = @elapsed(@test_throws Exception load_project(dir))
+    @test t < 2.0
+end
+
 @testset "a system before its members" begin
     p = load_project(project_dir("""
         @system S1 = [L1, T1] sources = [B1]

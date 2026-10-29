@@ -22,11 +22,13 @@ When this Skill is active:
 - This skill describes BeamletOpticsProjects **0.1** (`beamletopticsprojects-version` above). Check
   the installed version with `julia --project=. -e 'using BeamletOpticsProjects; println(pkgversion(BeamletOpticsProjects))'`.
   If its major or minor version differs, confirm every function with its docstring
-  (`display(@doc trace)`) and install the matching skill as above.
+  (`using REPL; display(@doc trace)`: without `REPL` a script prints the raw `DocStr`) and install
+  the matching skill as above.
 - Use only documented API (`API.md`). **Do not invent functions or keywords.**
 - Run Julia in the project environment (`julia --project=.` in the project folder) after any
   change: `load_project` must load, and `trace`/`look` show what the change did. Do not claim a
-  change works when you did not run it.
+  change works when you did not run it. Loading the packages takes about 15 s per `julia` call:
+  put loading, tracing, changing and tracing again into one script instead of many small calls.
 - People and agents are participants alike: announce yourself before you change the project, claim
   the objects you change, and release them and leave when you are done (see "Taking part").
 - **All work is live**, in the project that the people have open: also design studies, variants
@@ -103,7 +105,10 @@ Several people may have the project open in their own windows while you work on 
 - Each window writes `.bmo/session-<person>.md`: the selection and the recent actions of its person.
   If Claude Code was started in the project folder, its hook (`.claude/settings.json`) shows them
   with every prompt; otherwise read `.bmo/session*.md` when a person refers to "this" or "what I just
-  did". The other files in `.bmo/` (`presence-*.toml`, `view-*.toml`, `claims/`) belong to their
+  did". "Selected:" lists every object of a selection of several ("my selection"); the presence
+  file has them in `selected_ids`. A session file of a window that was not closed properly stays:
+  `look(p)` marks its participant "likely gone" when the presence file is older than its `ttl`,
+  and the actions carry their date. The other files in `.bmo/` (`presence-*.toml`, `view-*.toml`, `claims/`) belong to their
   participants; do not edit those of others, and change claims only with `claim!` and `release!`.
 
 ## Taking part

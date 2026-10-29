@@ -95,8 +95,19 @@ section(text, name) = split(rstrip(match(Regex("\\n$name\\n(.*?)(\\n[A-Z]|\\z)",
 ")
         write(joinpath(p.path, ".bmo", "session-claude@agent.md"), "not a presence")
         people = section(look(p; io = devnull), "Participants")
-        @test length(people) == 1
-        @test people == ["  claude@agent: Claude (agent) at L1 · aligning"]
+        @test length(people) == 1 && startswith(only(people), "  claude@agent: Claude (agent) at L1 · aligning · last beat ")
+        # a file older than its ttl is likely gone; several selected ids are listed
+        file = joinpath(p.path, ".bmo", "presence-claude@agent.toml")
+        write(file, "name = \"Claude\"
+kind = \"agent\"
+beat = 4
+ttl = 60
+selected_id = \"L1\"
+selected_ids = [\"L1\", \"D1\"]
+")
+        io = IOBuffer()
+        BeamletOpticsProjects._look_participants(io, p; now = mtime(file) + 600)
+        @test occursin("at L1, D1 · last beat 600 s ago (likely gone)", String(take!(io)))
     end
 
     @testset "around" begin

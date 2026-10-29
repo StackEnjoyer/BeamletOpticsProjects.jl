@@ -12,14 +12,35 @@ whose exported names `system.jl` can use) and runs `system.jl`, whose [`@compone
 Both run in a new module of their own, which `using BeamletOptics, BeamletOpticsProjects`. The
 groups are built when all lines are read, inner groups first, and then the systems.
 
-Errors name the line of `system.jl`. A project whose format (`[beamletoptics] format` of
-`Project.toml`, none: 1) is newer than the one this package reads is refused; the versions of the
-packages in `Project.toml` are not checked.
+Errors name the line of `system.jl`. A load that fails while another participant writes
+`system.jl` (it is half written at that moment, e.g. on a shared drive) is tried again, up to 3
+times, if the file changed a quarter of a second later; an error of a file that stays as it is is
+thrown at once after that. A project whose format (`[beamletoptics] format` of `Project.toml`,
+none: 1) is newer than the one this package reads is refused; the versions of the packages in
+`Project.toml` are not checked.
 """
 function load_project(path::AbstractString)
     path = project_dir(path)
     file = joinpath(path, "system.jl")
     isfile(file) || throw(ArgumentError("no system.jl in \"$path\""))
+    for attempt in 1:4
+        before = read(file)
+        try
+            return _load_project(path, file)
+        catch e
+            e isa InterruptException && rethrow()
+            attempt < 4 || rethrow()
+            # A file that another participant is writing: try again once it changed
+            sleep(_LOAD_RETRY)
+            read(file) == before && rethrow()
+        end
+    end
+end
+
+# How long `load_project` waits after a failed load before it looks whether the file changed [s]
+const _LOAD_RETRY = 0.25
+
+function _load_project(path, file)
     _check_format(path)
     name = project_name(path)
     # Before reading: a change while loading makes the stamp differ

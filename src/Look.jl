@@ -141,16 +141,24 @@ function _look_environment(io, p::Project)
     return nothing
 end
 
-# The participants by `read_presences`. A single look can not tell whether a participant is still
-# there (`alive` needs the time at which the reader saw the `beat` change), hence no age
-function _look_participants(io, p::Project)
+# The participants by `read_presences`, with the age of their presence file by its time of change
+# and the clock of this machine (the windows instead note when they saw the `beat` change, see
+# `alive`): one older than its `ttl` is likely gone, e.g. a window that was not closed
+function _look_participants(io, p::Project; now::Real = time())
     println(io, "Participants")
     people = read_presences(p.path)
     for id in sort!(collect(keys(people)))
         d = people[id]
         line = string("  ", id, ": ", d["name"], " (", d["kind"], ")")
-        isempty(d["selected_id"]) || (line *= string(" at ", d["selected_id"]))
+        selected = get(d, "selected_ids", nothing)
+        if selected isa AbstractVector && length(selected) > 1
+            line *= string(" at ", join(selected, ", "))
+        elseif !isempty(d["selected_id"])
+            line *= string(" at ", d["selected_id"])
+        end
         isempty(d["doing"]) || (line *= string(" · ", d["doing"]))
+        age = round(Int, max(0.0, now - mtime(presence_file(p.path, id))))
+        line *= string(" · last beat ", age, " s ago", age > d["ttl"] ? " (likely gone)" : "")
         println(io, line)
     end
     isempty(people) && println(io, "  none")

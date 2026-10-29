@@ -15,7 +15,7 @@ leave(".", name = "claude")
 versions(".")                    # the versions, newest first
 ```
 
-Print the docstring of a function before you use it: `display(@doc trace)`. Names that are public
+Print the docstring of a function before you use it: `using REPL; display(@doc trace)` (without `REPL` a script prints the raw `DocStr`). Names that are public
 but not exported are qualified: `BeamletOpticsProjects.install_agent_skill()`.
 
 ## Exported names

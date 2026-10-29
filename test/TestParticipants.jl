@@ -49,7 +49,7 @@ end
     # A file that can not be replaced (Windows: another one reads it) is overwritten in place
     fails = Ref(0)
     deny(from, to; force = true) = (fails[] += 1; throw(Base.IOError("rename: permission denied (EACCES)", -4092)))
-    BeamletOpticsProjects._write_or_overwrite(file, "beat = 7\n"; move = deny)
+    BeamletOpticsProjects._write_or_overwrite(file, "beat = 7\n"; move = deny, tries = 3, wait = 0.0)
     @test fails[] == 3 && read(file, String) == "beat = 7\n"
     @test isempty(filter(endswith(".tmp"), readdir(dirname(file))))
 end

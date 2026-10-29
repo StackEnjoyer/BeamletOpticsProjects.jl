@@ -109,21 +109,9 @@ function write_presence(dir::AbstractString, id::AbstractString, data::AbstractD
     out["beat"] = beat
     mkpath(dirname(file))
     text = sprint(io -> TOML.print(io, out; sorted = true))
-    _write_or_overwrite(file, text)
+    # A few short tries: the next beat writes it again anyway
+    _write_or_overwrite(file, text; tries = 3, wait = 0.02)
     return beat
-end
-
-# Moves a temporary file with `text` into place as `file` (see `_write_atomic`, a few short tries
-# with `move`), or overwrites `file` in place if that fails: Windows can not replace a file that
-# another process has open, also the client of a shared drive that keeps it open after a read
-function _write_or_overwrite(file, text; move = _rename)
-    try
-        _write_atomic(file, text; move, tries = 3, wait = 0.02)
-    catch e
-        (e isa Base.IOError || e isa SystemError) || rethrow()
-        open(io -> write(io, text), file, "w")
-    end
-    return file
 end
 
 # The `ttl` of a presence file: a positive real clamped to `_TTL_RANGE`, else `_TTL_DEFAULT`

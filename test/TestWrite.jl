@@ -30,6 +30,27 @@ line(e) = split(system_code(Project(mktempdir(), "X"; entries = [e])), "\n")[2]
     @test calls[] == 1
 end
 
+@testset "_write_or_overwrite: a file that can not be replaced is overwritten in place" begin
+    dir = mktempdir()
+    file = joinpath(dir, "system.jl")
+    write(file, "a long text that was there before\n")
+    calls = Ref(0)
+    deny = (tmp, f; force) -> (calls[] += 1; throw(Base.IOError("rename: permission denied (EACCES)", -4092)))
+    P._write_or_overwrite(file, "short\n"; move = deny, tries = 4, wait = 0.0)
+    # all renames tried, then written over the old text and the rest cut off
+    @test calls[] == 4 && read(file, String) == "short\n"
+    @test isempty(filter(endswith(".tmp"), readdir(dir)))
+    # a rename that works later: no overwrite needed
+    calls[] = 0
+    once = (tmp, f; force) -> (calls[] += 1; calls[] == 1 ? throw(SystemError("rename", 32)) : mv(tmp, f; force))
+    P._write_or_overwrite(file, "new\n"; move = once, wait = 0.0)
+    @test calls[] == 2 && read(file, String) == "new\n"
+    # a missing file is not created by the overwrite
+    gone = joinpath(dir, "gone.jl")
+    @test_throws Base.IOError P._write_or_overwrite(gone, "x"; move = deny, tries = 2, wait = 0.0)
+    @test !isfile(gone)
+end
+
 @testset "rotations" begin
     noisy = rotation_matrix((0.0, 0.0, 90.0)) + 1e-16 * [1 0 0; 0 -1 0; 0 0 1]
     @test endswith(line(entry(:A, noisy)), "rot = (0.0, 0.0, 90.0)")

@@ -185,7 +185,9 @@ function save_project(p::Project; packages::Vector{Module} = Module[], force::Bo
         isfile(marker) || write(marker, _marker_text(splitext(basename(marker))[1]))
         text = system_code(p)
         isnothing(by) || _check_claims(p.path, String(by), text)
-        _write_atomic(file, text)
+        # On a shared drive the others' reads can block the replace for a while (see
+        # `_write_or_overwrite`); the write lock keeps other writers out meanwhile
+        _write_or_overwrite(file, text; tries = 20, wait = 0.1)
         # The stamp of the text written, not of the files read again: agents edit the files
         # without the lock, and an edit right after this write is not part of it
         files["system.jl"] = Vector{UInt8}(text)
@@ -376,3 +378,24 @@ end
 # A rename that replaces `to` at once: never deletes it first or copies (as `mv` does after a
 # failed rename), so `to` is always one whole file
 _rename(from, to; force = true) = Base.rename(from, to)
+
+"""
+Writes `text` to `file` like `_write_atomic` (`tries` renames with `move`, `wait` seconds apart),
+or overwrites `file` in place if all of them fail: Windows can not replace a file that another
+process has open, also the client of a shared drive that keeps a file open for a while after it
+read it, but it can write into it. The new text is written over the old one before the rest is cut
+off, so a reader at that moment sees a mix that does not parse, never an empty file. A `file` that
+does not exist is not created here: the error of the rename is thrown.
+"""
+function _write_or_overwrite(file, text; move = _rename, tries::Int = 10, wait::Real = 0.05)
+    try
+        _write_atomic(file, text; move, tries, wait)
+    catch e
+        (e isa Base.IOError || e isa SystemError) && isfile(file) || rethrow()
+        open(file, "r+") do io
+            n = write(io, text)
+            truncate(io, n)
+        end
+    end
+    return file
+end

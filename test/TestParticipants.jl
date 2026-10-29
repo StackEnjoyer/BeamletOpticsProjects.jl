@@ -46,6 +46,37 @@ end
     # A file that does not parse starts again at 1
     write(file, "beat = ")
     @test write_presence(dir, "ada@pc", Dict("name" => "Ada")) == 1
+    # A file that can not be replaced (Windows: another one reads it) is overwritten in place
+    fails = Ref(0)
+    deny(from, to; force = true) = (fails[] += 1; throw(Base.IOError("rename: permission denied (EACCES)", -4092)))
+    BeamletOpticsProjects._write_or_overwrite(file, "beat = 7\n"; move = deny)
+    @test fails[] == 3 && read(file, String) == "beat = 7\n"
+    @test isempty(filter(endswith(".tmp"), readdir(dirname(file))))
+end
+
+@testset "read_presences: a cache reads only changed files" begin
+    dir = mktempdir()
+    write_presence(dir, "ada@pc", Dict("name" => "Ada"))
+    write_presence(dir, "bob@pc", Dict("name" => "Bob"))
+    cache = Dict{String, Any}()
+    ps = read_presences(dir; cache)
+    @test ps["ada@pc"]["beat"] == 1 && ps["bob@pc"]["beat"] == 1 && length(cache) == 2
+    # a cached entry is used as long as the file is unchanged (here: its entry is marked)
+    file = presence_file(dir, "ada@pc")
+    k = basename(file)
+    cache[k] = (cache[k][1], merge(cache[k][2], Dict("name" => "cached")))
+    @test read_presences(dir; cache)["ada@pc"]["name"] == "cached"
+    # the result is a copy: changing it leaves the cache alone
+    read_presences(dir; cache)["ada@pc"]["name"] = "changed"
+    @test cache[k][2]["name"] == "cached"
+    # a changed file is read again
+    sleep(0.05)
+    write_presence(dir, "ada@pc", Dict("name" => "Ada"))
+    ps = read_presences(dir; cache)
+    @test ps["ada@pc"]["name"] == "Ada" && ps["ada@pc"]["beat"] == 2
+    # a file that does not parse is not cached
+    write(joinpath(dir, ".bmo", "presence-half@pc.toml"), "name = \"Ha")
+    @test !haskey(read_presences(dir; cache), "half@pc") && !haskey(cache, "presence-half@pc.toml")
 end
 
 @testset "read_presences" begin

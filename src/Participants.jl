@@ -96,8 +96,11 @@ Writes the presence file of the participant `id` in the project folder `dir` (se
 [`presence_file`](@ref)) with the fields of `data` (keys converted to strings) and `beat` one
 higher than in the file before (1 for a new file; a `beat` in `data` is ignored), so that a
 participant that comes back continues its counter and the others see a change. Creates `.bmo/`.
-The write is atomic: a temporary file is moved into place, and a move that fails (e.g. a sharing
-violation on a network drive) is tried again. Returns the new `beat`.
+A temporary file is moved into place, so that a reader sees the whole file. Windows can not
+replace a file that another participant reads at that moment (on a shared drive its client may
+keep the file open for a while after it was read): then, after a few short tries, the file is
+overwritten in place, which a reader may see half written once (it skips such a file, see
+[`read_presences`](@ref)). Returns the new `beat`.
 """
 function write_presence(dir::AbstractString, id::AbstractString, data::AbstractDict)
     file = presence_file(dir, id)
@@ -105,8 +108,22 @@ function write_presence(dir::AbstractString, id::AbstractString, data::AbstractD
     beat = _file_beat(file) + 1
     out["beat"] = beat
     mkpath(dirname(file))
-    _write_atomic(file, sprint(io -> TOML.print(io, out; sorted = true)))
+    text = sprint(io -> TOML.print(io, out; sorted = true))
+    _write_or_overwrite(file, text)
     return beat
+end
+
+# Moves a temporary file with `text` into place as `file` (see `_write_atomic`, a few short tries
+# with `move`), or overwrites `file` in place if that fails: Windows can not replace a file that
+# another process has open, also the client of a shared drive that keeps it open after a read
+function _write_or_overwrite(file, text; move = _rename)
+    try
+        _write_atomic(file, text; move, tries = 3, wait = 0.02)
+    catch e
+        (e isa Base.IOError || e isa SystemError) || rethrow()
+        open(io -> write(io, text), file, "w")
+    end
+    return file
 end
 
 # The `ttl` of a presence file: a positive real clamped to `_TTL_RANGE`, else `_TTL_DEFAULT`
@@ -119,7 +136,7 @@ end
 _presence_string(data, key) = (x = get(data, key, ""); x isa AbstractString ? String(x) : "")
 
 """
-    read_presences(dir; except = nothing) -> Dict{String, Dict{String, Any}}
+    read_presences(dir; except = nothing, cache = nothing) -> Dict{String, Dict{String, Any}}
 
 The presence files of the participants of the project folder `dir` (see [`presence_file`](@ref))
 by id, without the one of the id `except` (e.g. the own `person().id`). A file that does not parse
@@ -128,21 +145,39 @@ normalized: `beat` an `Int`; `ttl` a `Float64` clamped to 5…3600 s (60 if miss
 `name` (default: the id), `kind` (default `"person"`), `host`, `selected`, `selected_id`, `doing`
 and `written` strings (default `""`); other fields are kept as they are. Whether a participant is
 there is up to the reader, which notes when it saw `beat` change, see [`alive`](@ref).
+
+A reader that looks often passes a `cache`, a `Dict` that it keeps between the calls (empty at
+first): a file whose time of change and size are those of the last call is not read again. On a
+shared drive this keeps the files of the others closed most of the time, which their writers
+need (see [`write_presence`](@ref)).
 """
-function read_presences(dir::AbstractString; except = nothing)
+function read_presences(dir::AbstractString; except = nothing, cache = nothing)
     out = Dict{String, Dict{String, Any}}()
     bmo = joinpath(dir, ".bmo")
     isdir(bmo) || return out
     for name in readdir(bmo)
         id = _presence_id(name)
         (isnothing(id) || id == except) && continue
+        file = joinpath(bmo, name)
+        st = stat(file)
+        mark = (st.mtime, st.size)
+        if !isnothing(cache)
+            hit = get(cache, name, nothing)
+            if !isnothing(hit) && hit[1] == mark
+                isnothing(hit[2]) || (out[id] = copy(hit[2]))
+                continue
+            end
+        end
         data = try
-            TOML.parsefile(joinpath(bmo, name))
+            TOML.parsefile(file)
         catch
             continue
         end
         beat = get(data, "beat", nothing)
-        beat isa Integer || continue
+        if !(beat isa Integer)
+            isnothing(cache) || (cache[name] = (mark, nothing))
+            continue
+        end
         d = Dict{String, Any}(data)
         d["beat"] = Int(beat)
         d["ttl"] = _presence_ttl(get(data, "ttl", nothing))
@@ -154,6 +189,7 @@ function read_presences(dir::AbstractString; except = nothing)
             d[key] = _presence_string(data, key)
         end
         out[id] = d
+        isnothing(cache) || (cache[name] = (mark, d))
     end
     return out
 end

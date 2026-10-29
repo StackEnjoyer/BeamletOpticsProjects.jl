@@ -298,13 +298,24 @@ function _take_away(file, expected)
     end
     ok = expected(away)
     ok || _put_back(away, file)
-    rm(away; force = true)
+    _rm_left(away)
     if ok
         for f in readdir(dirname(file); join = true)
-            startswith(basename(f), prefix) && expected(f) && rm(f; force = true)
+            startswith(basename(f), prefix) && expected(f) && _rm_left(f)
         end
     end
     return ok
+end
+
+# Removes the file `f` that `_take_away` moved away, if it can: on Windows another writer may have
+# it open right now (to check it as a leftover), then the next writer removes it
+function _rm_left(f)
+    try
+        rm(f; force = true)
+    catch e
+        e isa Base.IOError || rethrow()
+    end
+    return nothing
 end
 
 # Puts the file at `away` back to `file`, unless a new `file` was made meanwhile

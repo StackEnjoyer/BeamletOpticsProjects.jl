@@ -81,7 +81,7 @@ function _scaffold(path, name, packages)
     write_new(joinpath("src", name * ".jl"), _module_template(name))
     write_new("AGENTS.md", _agents_template(name))
     write_new("CLAUDE.md", "@AGENTS.md\n")
-    write_new(".gitignore", "Manifest.toml\n*.tmp\n.bmo/\n.claude/skills/\n")
+    write_new(".gitignore", "Manifest.toml\n*.tmp\n.bmo/\n.envs/\n.claude/skills/\n")
     mkpath(joinpath(path, ".claude"))
     write_new(joinpath(".claude", "settings.json"), _claude_settings())
     _install_skills(joinpath(path, ".claude", "skills"))
@@ -234,8 +234,8 @@ _agents_template(name) = """
     `beamletoptics`, the window in `beamletopticsgui`. They come from the installed packages, in the
     versions this project pins (`Project.toml`), and lie in `.claude/skills/` (not part of the
     versions). Read them before you change the project. If one is missing or the packages were
-    updated, install them again from the packages, in this folder and in the environment of this
-    project (`julia --project=.`, which loads the versions it pins):
+    updated, install them again from the packages, in this folder and in the package environment
+    of your person and machine (see "Packages"):
 
     ```julia
     using BeamletOptics, BeamletOpticsProjects
@@ -257,13 +257,31 @@ _agents_template(name) = """
     - `src/$name.jl`: own code (module `$name`): functions that build components or groups, own
       types. Its exported names can be used in `system.jl`. The GUI never writes it.
     - `view.toml`, `*.bmo`, `.bmo/`: belong to the windows, see the skill `beamletopticsprojects`.
-    - `Project.toml`: the versions this project was made with (`[compat]`), and where to get the
-      packages that do not come from a registry (`[sources]`).
+    - `Project.toml`: the packages the project needs (`[deps]`, `[compat]`) and where to get the
+      packages that do not come from a registry (`[sources]`), shared by everyone.
+    - `.envs/<person>@<machine>/`: the package environment of each person and machine (not
+      versioned); `Manifest.toml` in this folder itself is never loaded and may be deleted.
+
+    ## Packages
+
+    Every person and machine has a package environment of its own, `.envs/<person>@<machine>/`, a
+    plain Pkg environment that has this project by `path` and its packages. Make or update it with
+    `personal_environment!` of BeamletOpticsProjects (it changes no other environment), then run
+    Julia in it; agents use the one of the person they work for:
+
+    ```
+    julia --project=. -e "using Pkg; Pkg.instantiate(); using BeamletOpticsProjects; println(personal_environment!(\\".\\"))"
+    julia --project=.envs/<person>@<machine> script.jl
+    ```
+
+    Never work with this folder itself as the project of Julia (`--project=.`) except for these two
+    cases: the first command above, and `] add` of a package that the project needs (then
+    everybody runs `personal_environment!` again; an open window says so). Two people should not
+    add packages at the same time.
 
     ## Check
 
-    Run Julia in this folder in the environment of the project, `julia --project=.`. The first time
-    on a machine, install the versions it pins: `julia --project=. -e 'using Pkg; Pkg.instantiate()'`.
+    In your environment (see "Packages"):
 
     ```julia
     using BeamletOptics, BeamletOpticsProjects

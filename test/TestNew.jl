@@ -53,8 +53,9 @@ end
     for m in ("BeamletOptics", "BeamletOpticsProjects", "BeamletOpticsGUI")
         @test occursin("$m.install_agent_skill()", agents)
     end
-    # in the environment of the project, not the default one
-    @test occursin("--project=.", agents)
+    # in the package environment of the person and machine, not the default one or the folder
+    @test occursin("personal_environment!", agents) && occursin("--project=.envs/<person>@<machine>", agents)
+    @test ".envs/" in split(read(joinpath(dir, ".gitignore"), String), '\n')
     check = match(r"## Check\n(.*?)(\n## |\z)"s, agents).captures[1]
     for key in ("p = load_project(", "r = trace(p, :S1)", "r.detectors", "look(p)")
         @test occursin(key, check)

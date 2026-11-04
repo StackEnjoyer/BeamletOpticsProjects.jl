@@ -12,20 +12,28 @@ BeamletOpticsProjects reads, writes, traces and versions it, also without a wind
 
 When this Skill is active:
 
+- **Run Julia in the package environment of your person and machine, `.envs/<person>@<machine>/`
+  in the project folder** (a plain Pkg environment that has the project by `path` and its
+  packages). `personal_environment!(".")` makes or updates it and returns its path; run scripts
+  with `julia --project=.envs/<person>@<machine> script.jl` (the `AGENTS.md` of the project shows
+  the first call). Use the folder itself as Julia's project (`--project=.`) only for that first
+  call and for `] add` of a package that the project needs, and only when the person asks; after
+  such a change everybody calls `personal_environment!(".")` again. A `Manifest.toml` in the
+  project folder is never loaded.
 - **The optics comes from the `beamletoptics` skill** (units, +y optical axis, constructors,
   `solve_system!`, detectors), the window from the `beamletopticsgui` skill. Install the missing
-  ones from the packages, in the project folder and with the project environment
-  (`julia --project=.`, so that the versions the project pins are loaded): `using BeamletOptics; BeamletOptics.install_agent_skill()`,
+  ones from the packages, in the project folder and with your package environment (so that the
+  versions of the project are loaded): `using BeamletOptics; BeamletOptics.install_agent_skill()`,
   `using BeamletOpticsProjects; BeamletOpticsProjects.install_agent_skill()`,
   `using BeamletOpticsGUI; BeamletOpticsGUI.install_agent_skill()`. They come from the installed
   packages in the versions the project pins, never from a copy in the versions of the project.
 - This skill describes BeamletOpticsProjects **0.1** (`beamletopticsprojects-version` above). Check
-  the installed version with `julia --project=. -e 'using BeamletOpticsProjects; println(pkgversion(BeamletOpticsProjects))'`.
+  the installed version with `julia --project=.envs/<person>@<machine> -e 'using BeamletOpticsProjects; println(pkgversion(BeamletOpticsProjects))'`.
   If its major or minor version differs, confirm every function with its docstring
   (`using REPL; display(@doc trace)`: without `REPL` a script prints the raw `DocStr`) and install
   the matching skill as above.
 - Use only documented API (`API.md`). **Do not invent functions or keywords.**
-- Run Julia in the project environment (`julia --project=.` in the project folder) after any
+- Run Julia in your package environment (`julia --project=.envs/<person>@<machine>`) after any
   change: `load_project` must load, and `trace`/`look` show what the change did. Do not claim a
   change works when you did not run it. Loading the packages takes about 15 s per `julia` call:
   put loading, tracing, changing and tracing again into one script instead of many small calls.

@@ -26,6 +26,7 @@ but not exported are qualified: `BeamletOpticsProjects.install_agent_skill()`.
 | The form of `system.jl` | `@component`, `@source`, `@group`, `@system`, `id_prefix`, `next_id`, `apply_pose!`, `rotation_matrix` |
 | Change lines (checked, one write) | `add!`, `set!`, `move!`, `duplicate!`, `remove!` |
 | Read lines | `members`, `sources`, `pose`, `moved` |
+| Packages of a person and machine | `personal_environment!` |
 | Trace and read | `trace`, `look` |
 | Versions and changes | `save_version`, `versions`, `version_summary`, `diff_projects`, `EntryChange`, `SystemChange`, `GroupChange`, `copy_code` |
 | Participants and claims | `announce`, `leave`, `claim!`, `release!`, `claims` |

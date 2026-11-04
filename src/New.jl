@@ -92,11 +92,20 @@ end
 
 """
 Installs the agent skills of BeamletOptics and BeamletOpticsProjects into `dest`, each only if it
-is not there yet, without their messages.
+is not there yet, without their messages. BeamletOptics 0.14.0 makes its copy writable with
+`chmod` after the files are copied, which a network drive on Windows refuses: then the copy stays
+as it is (drop the `try` once BeamletOptics writes the files anew, as `install_agent_skill` here).
 """
 function _install_skills(dest)
     Base.CoreLogging.with_logger(Base.CoreLogging.NullLogger()) do
-        isdir(joinpath(dest, "beamletoptics")) || BMO.install_agent_skill(dest)
+        bmo = joinpath(dest, "beamletoptics")
+        if !isdir(bmo)
+            try
+                BMO.install_agent_skill(dest)
+            catch e
+                (e isa Base.IOError && isfile(joinpath(bmo, "SKILL.md"))) || rethrow()
+            end
+        end
         isdir(joinpath(dest, "beamletopticsprojects")) || install_agent_skill(dest)
     end
     return nothing

@@ -16,26 +16,26 @@ after `Pkg.update` keeps the skill in sync with the installed package version. L
 copy are lost.
 
 !!! info "File permissions"
-    Pkg installs packages read-only. The copied files are made writable so that the copy can be
-    edited and replaced later.
+    Pkg installs packages read-only. The files are written anew instead of copied with their
+    permissions, so that the copy can be edited and replaced later.
 """
 function install_agent_skill(dest::AbstractString = joinpath(pwd(), ".claude", "skills"))
     src = joinpath(pkgdir(@__MODULE__), "skills", "beamletopticsprojects")
     isdir(src) || throw(ErrorException("Agent skill not found at $src"))
     target = joinpath(dest, "beamletopticsprojects")
-    mkpath(dest)
-    # a read-only copy (as Pkg leaves it) can not be replaced on every OS: writable first
-    isdir(target) && _make_writable(target)
-    cp(src, target; force = true)
-    _make_writable(target)
+    rm(target; force = true, recursive = true)
+    _copy_contents(src, target)
     @info "Installed BeamletOpticsProjects agent skill (v$(pkgversion(@__MODULE__))) to $target"
     return target
 end
 
-function _make_writable(dir)
-    for (root, _, files) in walkdir(dir)
-        chmod(root, 0o755)
-        foreach(f -> chmod(joinpath(root, f), 0o644), files)
+# Copies the folder `src` to `dst` by the contents of its files: `cp` keeps the read-only
+# permissions of an installed package, new files are writable
+function _copy_contents(src, dst)
+    for (root, _, files) in walkdir(src)
+        dir = joinpath(dst, relpath(root, src))
+        mkpath(dir)
+        foreach(f -> write(joinpath(dir, f), read(joinpath(root, f))), files)
     end
     return nothing
 end

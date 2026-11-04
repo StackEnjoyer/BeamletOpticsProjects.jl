@@ -16,8 +16,11 @@ Prints the setup of `project` as text to `io` and returns the text, for agents t
 the window. Each system is traced as with [`trace`](@ref) (this changes the beams and detector
 hits of the objects). The sections:
 
-- **Environment**: the installed versions of BeamletOptics and BeamletOpticsProjects, with those
-  the project pins in its `Project.toml`, the path of BeamletOptics and the Julia version.
+- **Environment**: per package the version of this session and, in parentheses, the one that the
+  project file records (see [`project_versions`](@ref)): BeamletOptics (with its path),
+  BeamletOpticsProjects, the other packages it was saved with (e.g. BeamletOpticsGUI), and the
+  packages that the own code uses (`used by src/`; `not installed` if the active environment does
+  not have it), then the Julia version, e.g. `BeamletOptics 0.14.0 (project: 0.14.1) at …`.
 - **Participants**: the people and agents in `.bmo/presence-*.toml` (see `read_presences`): id, name,
   kind, the id they work on and what they do. A file without an integer `beat` is not listed. Whether
   a participant is still there is not shown: that needs the time at which a reader saw its `beat`
@@ -130,13 +133,20 @@ function _object_ids(p::Project)
 end
 
 function _look_environment(io, p::Project)
-    compat = Dict{String, Any}()
-    toml = project_file(p, "Project.toml")
-    isfile(toml) && (compat = get(TOML.parsefile(toml), "compat", compat))
-    pinned(m) = (c = get(compat, string(nameof(m)), nothing); isnothing(c) ? "" : " (project: $c)")
+    recorded = project_versions(p.path)
+    saved(table, name) = (v = get(table, name, nothing); isnothing(v) || isempty(v) ? "" : " (project: $v)")
+    installed(name) = (r = _installed_version(name); r[1] ? something(r[2], "?") : "not installed")
     println(io, "Environment")
-    println(io, "  BeamletOptics ", pkgversion(BMO), pinned(BMO), " at ", pkgdir(BMO))
-    println(io, "  BeamletOpticsProjects ", pkgversion(@__MODULE__), pinned(@__MODULE__))
+    bmo, bmop = string(nameof(BMO)), string(nameof(@__MODULE__))
+    println(io, "  ", bmo, " ", pkgversion(BMO), saved(recorded.versions, bmo), " at ", pkgdir(BMO))
+    println(io, "  ", bmop, " ", pkgversion(@__MODULE__), saved(recorded.versions, bmop))
+    # What else the project was saved with (e.g. the GUI), then the packages of `src/`
+    for name in sort!(setdiff(collect(keys(recorded.versions)), (bmo, bmop)))
+        println(io, "  ", name, " ", installed(name), saved(recorded.versions, name))
+    end
+    for name in sort!(collect(keys(recorded.packages)))
+        println(io, "  ", name, " ", installed(name), saved(recorded.packages, name), ", used by src/")
+    end
     println(io, "  Julia ", VERSION)
     return nothing
 end

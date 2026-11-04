@@ -97,7 +97,7 @@ their `uid`, else by their id) without loading the project. The kinds are `added
 label or further keywords) and `own code changed` (a file in `src/` that git does not ignore);
 more than 6 ids of a kind are counted (`"moved 9 objects"`). `"first version"` if there is no
 version yet, `""` if neither `system.jl` nor a file in `src/` changed: other files of the project
-(e.g. `view.toml`, `Project.toml`) are not looked at, though [`save_version`](@ref) commits them.
+(e.g. `view.toml`, the project file `*.bmo`) are not looked at, though [`save_version`](@ref) commits them.
 Throws an `ArgumentError` if the repository that holds the folder ignores it.
 """
 function version_summary(dir::AbstractString)

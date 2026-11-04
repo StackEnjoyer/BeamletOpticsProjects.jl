@@ -9,8 +9,9 @@
 Projects of [BeamletOptics.jl](https://github.com/JuliaPhysics/BeamletOptics.jl): an optical
 setup saved as a folder that people open in
 [BeamletOpticsGUI.jl](https://github.com/StackEnjoyer/BeamletOpticsGUI.jl) and that coding agents
-edit at the same time. A project pins the versions of the packages it was made with, so it opens
-as it was, also years later.
+edit at the same time. A project is data, no Julia environment: it opens from any environment that
+has the packages, and its project file records the versions it was saved with, which the GUI
+checks when it opens it.
 
 > [!NOTE]
 > A prototype, not registered yet. The format of the files may still change.
@@ -33,10 +34,9 @@ package ships its own agent skill (`install_agent_skill()`).
 
 ```text
 Bench/
-├── Bench.bmo           the project file, which people open
+├── Bench.bmo           the project file, which people open: the versions it was saved with
 ├── system.jl           the setup: one line per component, source and system
 ├── src/Bench.jl        own code of the project (functions, components)
-├── Project.toml        the exact versions of BeamletOptics and its packages
 ├── view.toml           how the GUI shows it (camera, layout)
 ├── AGENTS.md           instructions for coding agents (CLAUDE.md points to it)
 └── .bmo/               written by the open GUI, e.g. session-<person>.md (not versioned)
@@ -65,6 +65,7 @@ p[:L1]                          # the objects, by id
 save_project(p)                 # writes system.jl; throws ProjectChanged if the files changed meanwhile
 save_version("Bench")           # a version (a git commit via libgit2, no git install needed)
 versions("Bench")
+check_versions("Bench")         # the versions of Bench.bmo against those of this environment
 ```
 
 In the GUI, `open_project("Bench/Bench.bmo")` opens it; the window saves every action to the files

@@ -9,7 +9,7 @@ lens(id, y) = "@component $id = $LENS pos = (0.0, $y, 0.0) uid = \"$(lowercase(S
 @testset "two processes save at the same time: no lost update" begin
     dir = joinpath(mktempdir(), "Bench")
     mkpath(dir)
-    write(joinpath(dir, "Project.toml"), "name = \"Bench\"\n")
+    write(joinpath(dir, "Bench.bmo"), "name = \"Bench\"\n")
     write(joinpath(dir, "system.jl"), join([lens(:L1, 0.1), lens(:M1, 0.2)], "\n") * "\n")
     # Each process moves its own lens 30 times; a save that finds the files changed loads again
     code = """
@@ -60,7 +60,7 @@ end
 @testset "the write lock of another writer" begin
     dir = joinpath(mktempdir(), "Bench")
     mkpath(joinpath(dir, ".bmo"))
-    write(joinpath(dir, "Project.toml"), "name = \"Bench\"\n")
+    write(joinpath(dir, "Bench.bmo"), "name = \"Bench\"\n")
     write(joinpath(dir, "system.jl"), lens(:L1, 0.1) * "\n")
     lock = joinpath(dir, ".bmo", "write.lock")
     p = load_project(dir)

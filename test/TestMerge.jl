@@ -13,7 +13,7 @@ sys(id, members; rest = "") = "@system $id = [$(join(members, ", "))] sources = 
 """A project in a new folder from the `lines` of its `system.jl`."""
 function project(lines...)
     dir = mktempdir()
-    write(joinpath(dir, "Project.toml"), "name = \"Bench\"\n")
+    write(joinpath(dir, "Bench.bmo"), "name = \"Bench\"\n")
     write(joinpath(dir, "system.jl"), join(lines, "\n") * "\n")
     return load_project(dir)
 end

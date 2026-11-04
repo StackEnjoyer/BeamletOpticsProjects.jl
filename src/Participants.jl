@@ -45,7 +45,9 @@ coding agent, has one while it works on the project. It is a TOML file with the 
   unknown;
 - `doing`: a few words of what it does;
 - `written`: the [`project_stamp`](@ref) of the files after its last write, by which the others
-  find the writer of a change.
+  find the writer of a change;
+- `versions`: a table of the versions of the packages it works with by name (e.g.
+  `BeamletOptics = "0.14.1"`), by which the others see that they work with other versions.
 
 Whether a participant is there is judged on the clock of the reader only, see [`alive`](@ref).
 Write the file with [`write_presence`](@ref), read those of the others with
@@ -131,7 +133,8 @@ by id, without the one of the id `except` (e.g. the own `person().id`). A file t
 (e.g. half written on a network drive) or has no integer `beat` is skipped. The fields are
 normalized: `beat` an `Int`; `ttl` a `Float64` clamped to 5…3600 s (60 if missing or invalid);
 `name` (default: the id), `kind` (default `"person"`), `host`, `selected`, `selected_id`, `doing`
-and `written` strings (default `""`); other fields are kept as they are. Whether a participant is
+and `written` strings (default `""`); `versions` a `Dict{String, String}` (default empty, entries
+that are not strings are left out); other fields are kept as they are. Whether a participant is
 there is up to the reader, which notes when it saw `beat` change, see [`alive`](@ref).
 
 A reader that looks often passes a `cache`, a `Dict` that it keeps between the calls (empty at
@@ -176,6 +179,7 @@ function read_presences(dir::AbstractString; except = nothing, cache = nothing)
         for key in ("host", "selected", "selected_id", "doing", "written")
             d[key] = _presence_string(data, key)
         end
+        d["versions"] = _string_table(get(data, "versions", nothing))
         out[id] = d
         isnothing(cache) || (cache[name] = (mark, d))
     end
@@ -194,16 +198,19 @@ clocks of the machines are never compared.
 alive(o, now::Real) = now - o.seen_at < o.ttl
 
 """
-    announce(dir; name, doing = "", selected_id = "", ttl = 120, kind = "agent", wrote = false) -> String
+    announce(dir; name, doing = "", selected_id = "", ttl = 120, kind = "agent", wrote = false,
+             versions = Dict{String, String}()) -> String
 
 Takes part in the project in the folder `dir`, or tells the others the next step: writes the
 presence file (see [`presence_file`](@ref)) of the id `"<name>@agent"` (characters outside
 `[A-Za-z0-9_.@-]` replaced by `_`) with `name`, the host, `kind` (a label only), `ttl`, the
-readable id `selected_id` of the object it works on and `doing` (a few words). `beat` grows by one
-with every call (see [`write_presence`](@ref)). Call it before changing the project, after each
-change and at every step; call [`leave`](@ref) when done. Returns the id. The claims of the
-participant (see [`claim!`](@ref)) live as long as its presence, i.e. `ttl` seconds after its
-last call; `claim!` writes the presence again.
+readable id `selected_id` of the object it works on, `doing` (a few words) and `versions`: those of
+BeamletOptics and BeamletOpticsProjects in this session and the entries of the `versions` passed
+(package name => version, e.g. of a program of the caller; this session wins for BeamletOptics
+and BeamletOpticsProjects). `beat` grows by one with every call (see [`write_presence`](@ref)).
+Call it before changing the project, after each change and at every step; call [`leave`](@ref)
+when done. Returns the id. The claims of the participant (see [`claim!`](@ref)) live as long as
+its presence, i.e. `ttl` seconds after its last call; `claim!` writes the presence again.
 
 `name` is the id of the participant and must be unique per participant (e.g. `"claude-w1"` for a
 worker of a team): participants with the same `name` share one presence file, so their calls
@@ -216,23 +223,30 @@ merged the change. Otherwise the `written` of the presence file before is kept (
 none), so a call that wrote nothing never claims the change of someone else.
 """
 function announce(dir::AbstractString; name, doing = "", selected_id = "", ttl = 120, kind = "agent",
-        wrote::Bool = false)
+        wrote::Bool = false, versions::AbstractDict = Dict{String, String}())
     id = _participant_id(String(name), "agent")
     written = wrote ? project_stamp(dir) : _file_written(presence_file(dir, id))
     data = Dict{String, Any}("name" => String(name), "host" => gethostname(), "kind" => String(kind),
         "ttl" => ttl, "selected_id" => String(selected_id), "doing" => String(doing),
-        "written" => written)
+        "written" => written, "versions" => merge(_string_dict(versions), _session_versions()))
     write_presence(dir, id, data)
     return id
 end
 
+# The versions of BeamletOptics and BeamletOpticsProjects in this session, by name
+_session_versions() = Dict{String, String}(string(nameof(m)) => string(pkgversion(m))
+                                           for m in (BMO, @__MODULE__) if !isnothing(pkgversion(m)))
+
+# `d` as a `Dict{String, String}` of strings of its keys and values
+_string_dict(d::AbstractDict) = Dict{String, String}(string(k) => string(v) for (k, v) in d)
+
 """
 Announces a write of the participant `by` to the project in the folder `dir` right after it (see
 [`announce`](@ref) with `wrote = true`), with `doing` (e.g. "added M19") and `selected_id` (`nothing`:
-as before), keeping the `ttl` and `kind` of its presence file if it has one: the writes of this
-package that take `by` (`add!`, `move!`, ...) call it, so that the windows name the participant at
-the change without an `announce` of its own. Nothing without `by`. An error of writing the presence
-is no error of the write, which is done: it is logged.
+as before), keeping the `ttl`, `kind` and `versions` of its presence file if it has one: the
+writes of this package that take `by` (`add!`, `move!`, ...) call it, so that the windows name the
+participant at the change without an `announce` of its own. Nothing without `by`. An error of
+writing the presence is no error of the write, which is done: it is logged.
 """
 function _announce_wrote(dir::AbstractString, by, doing::AbstractString; selected_id = nothing)
     isnothing(by) && return nothing
@@ -246,7 +260,8 @@ function _announce_wrote(dir::AbstractString, by, doing::AbstractString; selecte
     try
         announce(dir; name = String(by), doing, wrote = true, ttl = ttl isa Real ? ttl : 120,
             kind = isempty(kind) ? "agent" : kind,
-            selected_id = something(selected_id, _presence_string(old, "selected_id")))
+            selected_id = something(selected_id, _presence_string(old, "selected_id")),
+            versions = _string_table(get(old, "versions", nothing)))
     catch e
         (e isa Base.IOError || e isa SystemError) || rethrow()
         @warn "the write is done, but its announce failed" exception = e

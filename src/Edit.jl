@@ -21,7 +21,9 @@ The changed project is checked before anything is written: the code builds in th
 project (with its own code of `src/`), the pose is finite and the whole `system.jl` loads again.
 A check that fails throws an `ArgumentError` naming the id, and nothing is written. The write is
 one [`save_project`](@ref) with the participant `by`, which respects the claims of the others
-(see [`claim!`](@ref)) and throws [`ProjectChanged`](@ref) if the files changed meanwhile.
+(see [`claim!`](@ref)). If the files changed between loading and writing (e.g. an open window
+added the machine ids of lines that were just written as text), all of it is done again from the
+files, up to 3 times; then it throws [`ProjectChanged`](@ref).
 
 # Examples
 
@@ -31,7 +33,10 @@ add!(".", "RoundPlanoMirror(0.0254, 0.006)"; pos = (0.1, 0.2, 0.0), rot = (0, 0,
 add!(".", "Beam([0.0, 0.0, 0.0], [0.0, 1.0, 0.0], 1.064e-6)"; systems = [:S1])   # a source
 ```
 """
-function add!(dir::AbstractString, code::AbstractString; id = nothing, pos = (0, 0, 0),
+add!(dir::AbstractString, code::AbstractString; kwargs...) =
+    _retry_changed(() -> _add_once!(dir, code; kwargs...))
+
+function _add_once!(dir::AbstractString, code::AbstractString; id = nothing, pos = (0, 0, 0),
         rot = (0, 0, 0), label = nothing, systems = Symbol[], by = nothing)
     p = load_project(dir)
     what = isnothing(id) ? "the new line" : "`$id`"
@@ -87,7 +92,10 @@ set!(".", :L1; pos = (0.0, 0.12, 0.0), by = "claude")
 set!(".", :L1; code = "SphericalLens(0.05, -0.05, 0.006, 0.0254, ConstantRefractiveIndex(1.5))", label = "Collimator")
 ```
 """
-function set!(dir::AbstractString, id::Symbol; pos = nothing, rot = nothing, code = nothing,
+set!(dir::AbstractString, id::Symbol; kwargs...) =
+    _retry_changed(() -> _set_once!(dir, id; kwargs...))
+
+function _set_once!(dir::AbstractString, id::Symbol; pos = nothing, rot = nothing, code = nothing,
         label = nothing, by = nothing)
     p = load_project(dir)
     i = findfirst(e -> e.name === id, p.entries)
@@ -165,7 +173,10 @@ duplicate!(".", [:M1]; offset = (0.0, 0.05, 0.0), by = "claude")   # -> [:M3]
 duplicate!(".", [:G1]; rot = (0, 0, 180), pivot = (0.0, 0.0, 0.0))  # -> [:L3, :M4, :G2]
 ```
 """
-function duplicate!(dir::AbstractString, ids::Vector{Symbol}; offset = (0, 0, 0), rot = nothing,
+duplicate!(dir::AbstractString, ids::Vector{Symbol}; kwargs...) =
+    _retry_changed(() -> _duplicate_once!(dir, ids; kwargs...))
+
+function _duplicate_once!(dir::AbstractString, ids::Vector{Symbol}; offset = (0, 0, 0), rot = nothing,
         pivot = :center, systems = :same, by = nothing)
     p = load_project(dir)
     sel = unique(ids)
@@ -244,7 +255,10 @@ The checks and the write are those of [`add!`](@ref): a check that fails throws 
 remove!(".", [:M3, :G2]; by = "claude")
 ```
 """
-function remove!(dir::AbstractString, ids::Vector{Symbol}; by = nothing)
+remove!(dir::AbstractString, ids::Vector{Symbol}; kwargs...) =
+    _retry_changed(() -> _remove_once!(dir, ids; kwargs...))
+
+function _remove_once!(dir::AbstractString, ids::Vector{Symbol}; by = nothing)
     p = load_project(dir)
     sel = unique(ids)
     foreach(id -> _edit_kind(p, id), sel)
@@ -272,6 +286,24 @@ function remove!(dir::AbstractString, ids::Vector{Symbol}; by = nothing)
     save_project(p; by)
     _announce_wrote(p.path, by, "removed " * join(ids, ", "); selected_id = "")
     return load_project(p.path)
+end
+
+"""
+Runs `f()`, an edit that loads the project, changes it and writes it in one go, and runs it again
+if it throws [`ProjectChanged`](@ref) (the files changed between its load and its write, e.g. an
+open window added the machine ids of lines written as text), up to `tries` times, `wait` seconds
+apart; then rethrows. `f` keeps no state between the runs: each loads the files again, so its ids
+and checks are those of the files at that run.
+"""
+function _retry_changed(f; tries::Int = 3, wait::Real = 0.5)
+    for attempt in 1:tries
+        try
+            return f()
+        catch e
+            (e isa ProjectChanged && attempt < tries) || rethrow()
+        end
+        sleep(wait)
+    end
 end
 
 """`:entry` or `:group` for the id `id` of `p`; throws for a system or an unknown id."""
@@ -400,8 +432,9 @@ function _edit_check(p::Project, ids::Vector{Symbol})
         text = system_code(p)
         dir = joinpath(root, basename(p.path))
         mkpath(dir)
-        toml = joinpath(p.path, "Project.toml")
-        isfile(toml) && cp(toml, joinpath(dir, "Project.toml"))
+        # The project file names the module of `src/`
+        marker = project_marker(p.path)
+        isfile(marker) && cp(marker, joinpath(dir, basename(marker)))
         src = joinpath(p.path, "src")
         isdir(src) && cp(src, joinpath(dir, "src"))
         file = joinpath(dir, "system.jl")

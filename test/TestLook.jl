@@ -1,6 +1,7 @@
 module TestLook
 
 using BeamletOptics, BeamletOpticsProjects
+using TOML
 using Test
 
 const SYSTEM = """
@@ -21,9 +22,9 @@ const SYSTEM = """
 @system S4 = [D1] sources = [B6]
 """
 
-function bench(; compat = "")
+function bench(; versions = "")
     dir = mktempdir()
-    write(joinpath(dir, "Project.toml"), "name = \"Bench\"\n" * compat)
+    write(joinpath(dir, "Bench.bmo"), "name = \"Bench\"\n" * versions)
     mkpath(joinpath(dir, "src"))
     write(joinpath(dir, "src", "Bench.jl"), "module Bench\nend\n")
     write(joinpath(dir, "system.jl"), SYSTEM)
@@ -35,15 +36,27 @@ section(text, name) = split(rstrip(match(Regex("\\n$name\\n(.*?)(\\n[A-Z]|\\z)",
 
 @testset "look" begin
     v = pkgversion(BeamletOptics)
-    p = bench(; compat = "\n[compat]\nBeamletOptics = \"= $v\"\n")
+    p = bench(; versions = """
+        [versions]
+        BeamletOptics = "$v"
+        BeamletOpticsGUI = "0.3.0"
+
+        [packages]
+        TOML = "1.0.0"
+        NotInstalledXyz = "2.1.0"
+        """)
     io = IOBuffer()
     text = look(p; io)
     @test String(take!(io)) == text
 
     @testset "environment" begin
         env = section(text, "Environment")
-        @test "  BeamletOptics $v (project: = $v) at $(pkgdir(BeamletOptics))" in env
+        # installed (project: recorded) per package, also those of src/
+        @test "  BeamletOptics $v (project: $v) at $(pkgdir(BeamletOptics))" in env
         @test "  BeamletOpticsProjects $(pkgversion(BeamletOpticsProjects))" in env
+        @test "  BeamletOpticsGUI not installed (project: 0.3.0)" in env
+        @test "  TOML $(pkgversion(TOML)) (project: 1.0.0), used by src/" in env
+        @test "  NotInstalledXyz not installed (project: 2.1.0), used by src/" in env
         @test "  Julia $VERSION" in env
     end
 

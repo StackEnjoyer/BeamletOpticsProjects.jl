@@ -25,7 +25,7 @@ const SYSTEM = HEADER * """
 
 function project_dir(system = SYSTEM; toml = "name = \"Bench\"\n")
     dir = mktempdir()
-    write(joinpath(dir, "Project.toml"), toml)
+    write(joinpath(dir, "Bench.bmo"), toml)
     write(joinpath(dir, "system.jl"), system)
     return dir
 end
@@ -183,7 +183,7 @@ end
 end
 
 @testset "format gate" begin
-    toml(f) = "name = \"Bench\"\n\n[beamletoptics]\nformat = $f\n"
+    toml(f) = "format = $f\nname = \"Bench\"\n"
     m = message(() -> load_project(project_dir(; toml = toml(2))))
     @test occursin("format 2", m) && occursin("format 1", m)
     @test_throws ArgumentError load_project(project_dir(; toml = toml(2)))

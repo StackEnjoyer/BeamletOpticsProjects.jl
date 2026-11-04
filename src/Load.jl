@@ -16,8 +16,10 @@ Errors name the line of `system.jl`. A load that fails while another participant
 `system.jl` (it is half written at that moment, or cannot be opened while it is replaced, e.g. on
 Windows or a shared drive) is tried again, up to 3 times, if the file changed or could not be read
 a quarter of a second later; an error of a file that stays as it is is thrown after that one wait.
-A project whose format (`[beamletoptics] format` of `Project.toml`, none: 1) is newer than the one
-this package reads is refused; the versions of the packages in `Project.toml` are not checked.
+A project whose format (`format` of its project file `<name>.bmo`, none: 1) is newer than the one
+this package reads is refused; the versions that the project file records are not checked (see
+[`check_versions`](@ref)). If the own code uses (`using`, `import`) a package that is not
+installed in the active environment, throws an `ArgumentError` that names it.
 """
 function load_project(path::AbstractString)
     path = project_dir(path)
@@ -72,14 +74,13 @@ function _load_project(path, file)
 end
 
 """
-Throws if the project in the folder `path` has a newer format (`[beamletoptics] format` of its
-`Project.toml`) than [`FORMAT`](@ref); a missing entry is format 1.
+Throws if the project in the folder `path` has a newer format (`format` of its project file, see
+[`project_marker`](@ref)) than [`FORMAT`](@ref); a missing entry or file is format 1.
 """
 function _check_format(path)
-    toml = joinpath(path, "Project.toml")
-    isfile(toml) || return nothing
-    format = get(get(TOML.parsefile(toml), "beamletoptics", Dict{String, Any}()), "format", 1)
-    format isa Integer || throw(ArgumentError("[beamletoptics] format of \"$toml\" must be an integer, got $(repr(format))"))
+    format = get(_read_marker(path), "format", 1)
+    format isa Integer ||
+        throw(ArgumentError("format of \"$(project_marker(path))\" must be an integer, got $(repr(format))"))
     format ≤ FORMAT && return nothing
     throw(ArgumentError("the project in \"$path\" has format $format, this BeamletOpticsProjects reads format $FORMAT and older: update BeamletOpticsProjects"))
 end
@@ -92,7 +93,18 @@ const EXTENSION = ".bmo"
 
 The path of the project file of the project in the folder `dir`: the file `*.bmo` in it, or
 `<folder name>.bmo` if there is none yet. People and the dialogs of the GUI open a project by it;
-it holds only the format, the project is the folder.
+the project is the folder. It is the only file of metadata of the project, a TOML file with
+
+- `format`: the version of the format of `system.jl` (see [`FORMAT`](@ref)), none: 1;
+- `name`: the module name of the own code `src/<name>.jl` (none: [`module_name`](@ref) of the
+  folder);
+- `[versions]`: the newest versions of BeamletOptics, BeamletOpticsProjects and the packages of
+  the program that saved it (e.g. BeamletOpticsGUI) that the project was saved with: every save
+  raises them, none lowers them;
+- `[packages]`: the packages that the own code in `src/` uses (`using`, `import`), with the newest
+  version they were saved with (`""` if it was not known).
+
+See [`project_versions`](@ref), [`check_versions`](@ref).
 """
 function project_marker(dir::AbstractString)
     dir = abspath(dir)
@@ -117,13 +129,28 @@ end
 """
     project_name(path) -> String
 
-The module name of the project in the folder `path`: `name` of its `Project.toml`, else
-[`module_name`](@ref) of the folder.
+The module name of the project in the folder `path` (or of its project file): `name` of its
+project file (see [`project_marker`](@ref)), else [`module_name`](@ref) of the folder.
 """
 function project_name(path)
-    toml = joinpath(path, "Project.toml")
-    isfile(toml) && return String(get(TOML.parsefile(toml), "name", module_name(path)))
-    return module_name(path)
+    path = project_dir(path)
+    name = get(_read_marker(path), "name", nothing)
+    return name isa AbstractString && !isempty(name) ? String(name) : module_name(path)
+end
+
+"""
+The content of the project file of the project in the folder `dir` (see [`project_marker`](@ref)),
+empty if there is none. Throws an `ArgumentError` if it does not parse.
+"""
+function _read_marker(dir)
+    file = project_marker(dir)
+    isfile(file) || return Dict{String, Any}()
+    try
+        return TOML.parsefile(file)
+    catch e
+        e isa TOML.ParserError || rethrow()
+        throw(ArgumentError("the project file \"$file\" is not valid TOML: $(sprint(showerror, e))"))
+    end
 end
 
 """
@@ -146,7 +173,13 @@ function _project_module(path, name)
     Core.eval(mod, :(using .BeamletOptics, .BeamletOpticsProjects))
     src = joinpath(path, "src", name * ".jl")
     if isfile(src)
-        Base.include(mod, src)
+        try
+            Base.include(mod, src)
+        catch e
+            pkg = _missing_package(e)
+            isnothing(pkg) && rethrow()
+            throw(ArgumentError("the project's code uses $pkg, which is not installed in this environment: `] add $pkg`"))
+        end
         sym = Symbol(name)
         # The module was defined by the include, in a newer world than this function's
         Base.invokelatest(isdefined, mod, sym) &&
@@ -154,4 +187,142 @@ function _project_module(path, name)
             Core.eval(mod, :(using .$sym))
     end
     return mod
+end
+
+"""
+The name of the package that the error `e` of an `include` says is not installed (`using X` of a
+package that the active environments do not have, or have without installing it), else `nothing`.
+"""
+function _missing_package(e)
+    while e isa LoadError
+        e = e.error
+    end
+    e isa ArgumentError || return nothing
+    m = match(r"^Package (\w+) not found in current path", e.msg)
+    isnothing(m) &&
+        (m = match(r"^Package (\w+) \[[^\]]*\] is required but does not seem to be installed", e.msg))
+    return isnothing(m) ? nothing : String(m.captures[1])
+end
+
+#=
+The versions that the project file records, and those of this session
+=#
+
+"""
+    project_versions(path) -> (; versions::Dict{String, String}, packages::Dict{String, String})
+
+The versions that the project file of the project in the folder `path` (or the project file
+`path`) records, by package name (see [`project_marker`](@ref)): `versions`, the newest versions
+of BeamletOptics, BeamletOpticsProjects and the programs that saved it (e.g. BeamletOpticsGUI),
+and `packages`, the packages that the own code in `src/` uses with their newest versions (`""`:
+not known). Both are empty for a project file without them (or without a project file).
+"""
+function project_versions(path::AbstractString)
+    data = _read_marker(project_dir(path))
+    return (; versions = _string_table(get(data, "versions", nothing)),
+        packages = _string_table(get(data, "packages", nothing)))
+end
+
+# A table of the project file as strings by string, without entries that are not strings
+_string_table(x) = x isa AbstractDict ?
+    Dict{String, String}(String(k) => String(v) for (k, v) in x if v isa AbstractString) :
+    Dict{String, String}()
+
+"""
+    VersionCheck(package, recorded, installed, status)
+
+The result of [`check_versions`](@ref) for one package: its name, the version that the project
+records (`nothing`: none or not a version), the version of this session (`nothing`: not known or
+not installed) and `status`:
+
+- `:same`: the same version, or nothing to compare (no version recorded or known);
+- `:newer`: a newer version is installed that is compatible with the recorded one (same major
+  version from 1.0 on, same minor version for 0.x);
+- `:breaking`: a newer version is installed that is not compatible with the recorded one;
+- `:older`: an older version is installed than the project was saved with;
+- `:missing`: the package is not installed in the active environment.
+"""
+struct VersionCheck
+    package::String
+    recorded::Union{VersionNumber, Nothing}
+    installed::Union{VersionNumber, Nothing}
+    status::Symbol
+end
+
+"""
+    check_versions(path; packages = Module[]) -> Vector{VersionCheck}
+
+Compares the versions that the project file of the project in the folder `path` records (see
+[`project_versions`](@ref)) with those of this session, one [`VersionCheck`](@ref) per package:
+
+- BeamletOptics, BeamletOpticsProjects and the modules `packages` (e.g. the program that opens the
+  project passes itself) with `pkgversion` against `[versions]`; the other entries of `[versions]`
+  are not checked;
+- every entry of `[packages]` with what the active environment would load for `using` (`:missing`
+  if it does not have the package or has not installed it).
+
+Checks only: nothing is loaded or installed, and [`load_project`](@ref) does not call it.
+"""
+function check_versions(path::AbstractString; packages::Vector{Module} = Module[])
+    recorded = project_versions(path)
+    out = VersionCheck[]
+    for m in unique!(Module[BMO, @__MODULE__, packages...])
+        name = string(nameof(m))
+        rec = _version_or_nothing(get(recorded.versions, name, nothing))
+        inst = _version_or_nothing(pkgversion(m))
+        push!(out, VersionCheck(name, rec, inst, _version_status(rec, inst)))
+    end
+    for name in sort!(collect(keys(recorded.packages)))
+        rec = _version_or_nothing(recorded.packages[name])
+        found, inst = _installed_version(name)
+        push!(out, VersionCheck(name, rec, inst, found ? _version_status(rec, inst) : :missing))
+    end
+    return out
+end
+
+# A `VersionNumber` of `v` (a string or a version), `nothing` if it is none
+function _version_or_nothing(v)
+    v isa VersionNumber && return v
+    v isa AbstractString || return nothing
+    return tryparse(VersionNumber, v)
+end
+
+# The status of a `VersionCheck` of an installed package, see `VersionCheck`
+function _version_status(recorded, installed)
+    (isnothing(recorded) || isnothing(installed)) && return :same
+    installed == recorded && return :same
+    installed < recorded && return :older
+    return _compatible(recorded, installed) ? :newer : :breaking
+end
+
+# Whether `b` is compatible with `a` by semantic versioning: the same major version from 1.0 on,
+# the same minor version for 0.x
+_compatible(a::VersionNumber, b::VersionNumber) =
+    a.major == b.major && (a.major ≥ 1 || a.minor == b.minor)
+
+"""
+Whether the active environment has the package `name` installed, and its version (`nothing` if it
+is not known): of the module if it is loaded, else from the project file of Pkg of the installed
+package. Loads nothing.
+"""
+function _installed_version(name::AbstractString)
+    id = Base.identify_package(String(name))
+    isnothing(id) && return (false, nothing)
+    if Base.root_module_exists(id)
+        return (true, _version_or_nothing(pkgversion(Base.root_module(id))))
+    end
+    entry = Base.locate_package(id)
+    isnothing(entry) && return (false, nothing)
+    root = dirname(dirname(entry))
+    for f in Base.project_names
+        file = joinpath(root, f)
+        isfile(file) || continue
+        v = try
+            get(TOML.parsefile(file), "version", nothing)
+        catch
+            nothing
+        end
+        return (true, _version_or_nothing(v))
+    end
+    return (true, nothing)
 end

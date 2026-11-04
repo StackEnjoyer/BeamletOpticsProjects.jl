@@ -26,7 +26,7 @@ but not exported are qualified: `BeamletOpticsProjects.install_agent_skill()`.
 | The form of `system.jl` | `@component`, `@source`, `@group`, `@system`, `id_prefix`, `next_id`, `apply_pose!`, `rotation_matrix` |
 | Change lines (checked, one write) | `add!`, `set!`, `move!`, `duplicate!`, `remove!` |
 | Read lines | `members`, `sources`, `pose`, `moved` |
-| Packages of a person and machine | `personal_environment!` |
+| Versions of the packages | `project_versions`, `check_versions`, `VersionCheck` |
 | Trace and read | `trace`, `look` |
 | Versions and changes | `save_version`, `versions`, `version_summary`, `diff_projects`, `EntryChange`, `SystemChange`, `GroupChange`, `copy_code` |
 | Participants and claims | `announce`, `leave`, `claim!`, `release!`, `claims` |
@@ -47,23 +47,43 @@ but not exported are qualified: `BeamletOpticsProjects.install_agent_skill()`.
 - `trace(p, :S1; flen = 0.1)` initializes the system (its detectors are emptied), solves each source
   of its `@system` line and returns `segments`, `ids` (one per segment: the id of the object hit at
   its end, `nothing` without a hit), `warnings` (what BeamletOptics warned about) and `detectors` (`hits`, `power` [W] per member that
-  is a `Detector`; `power` is `nothing` for the hits of rays, which carry none: not 0 W). Only the
+  is a `Detector`; `hits` is the number of hits the detector stored: one per ray or beamlet of the
+  sources that reached it, e.g. 60 for a `CollimatedSource` of 60 rays that all arrive; `power` is
+  `nothing` for the hits of rays, which carry none: not 0 W). Only the
   sources of that system are solved: a detector in several systems holds only their hits, while the
   window superposes the hits of all systems that share it. Tracing again gives the same segments
   and hit counts, and the same `power` except for a beam group as source (e.g. `CollimatedSource`)
   traced with several threads, where `power` can differ in the last bits. Measurements only: no
   tolerances, no verdicts.
-- `look(p)` prints and returns: the versions (installed and pinned) and the path of BeamletOptics,
-  the participants, per system one line per chain of ids along the beams with the distances in mm
+- `look(p)` prints the overview to `stdout` (`io = ...` to another stream) and returns the same
+  text as a `String`: call it alone, not in `println(look(p))`, which prints it twice. It shows the versions (installed, and in parentheses those that the project
+  file records) and the path of BeamletOptics, the participants, per system one line per chain of ids along the beams with the distances in mm
   (`B1 → L1 (50.0 mm) → D1 (20.0 mm)`, `out` leaves the system, `?` has no id) and the detector
   readings (`rays, no power` for the hits of rays), and the objects without a system. Sources are
   shown with their label. `around = :L3` keeps the objects within 50 mm of L3
   and the beams through them.
 
+## Versions of the packages
+
+A project is no Julia environment: it opens from any environment that has BeamletOptics,
+BeamletOpticsProjects and the packages that its own code uses. Its project file `<folder>.bmo`
+records `format`, `name` (the module of `src/<name>.jl`), `[versions]` (the newest versions of
+BeamletOptics, BeamletOpticsProjects and e.g. BeamletOpticsGUI that it was saved with; every save
+raises them, none lowers them) and `[packages]` (what `src/` uses with `using`/`import`, found at
+every save).
+
+- `project_versions(path) -> (; versions, packages)`: both tables, `Dict{String, String}`.
+- `check_versions(path; packages = Module[]) -> Vector{VersionCheck}`: per package `package`,
+  `recorded`, `installed` and `status`: `:same`, `:newer` (installed newer, compatible),
+  `:breaking` (installed newer, other major version or other minor of 0.x), `:older` (`] up X`) or
+  `:missing` (not in the environment: `] add X`). `load_project` does not check; it throws an
+  `ArgumentError` naming a package that `src/` uses and the environment does not have.
+
 ## Participants and teams
 
-- `announce(dir; name, doing = "", selected_id = "", ttl = 120, kind = "agent", wrote = false)`
-  writes `.bmo/presence-<name>@agent.toml` and returns the id. `name` must be unique per participant
+- `announce(dir; name, doing = "", selected_id = "", ttl = 120, kind = "agent", wrote = false,
+  versions = Dict{String, String}())` writes `.bmo/presence-<name>@agent.toml` with the versions of
+  BeamletOptics, BeamletOpticsProjects and those passed, and returns the id. `name` must be unique per participant
   (`"claude-w1"`); `announce` does not invent ids. `written` (the stamp of the files, by which the
   windows name the writer of a change) is published only with `wrote = true`, right after writing;
   otherwise the earlier `written` is kept. `leave(dir; name)` deletes the file.

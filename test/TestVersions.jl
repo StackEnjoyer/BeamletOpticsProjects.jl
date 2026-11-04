@@ -55,7 +55,7 @@ end
     vs = versions(dir)
     @test length(vs) == 3 && vs[1].message == "moved L1" && vs[1].id == id
     # Deleted files are part of the version, ignored ones are not
-    write(joinpath(dir, "Manifest.toml"), "ignored")
+    write(joinpath(dir, "notes.tmp"), "ignored")
     mkpath(joinpath(dir, ".bmo"))
     write(joinpath(dir, ".bmo", "session.md"), "ignored")
     write(joinpath(dir, "src", "Extra.jl"), "module Extra end\n")
@@ -68,7 +68,7 @@ end
     LibGit2.with(LibGit2.GitRepo(dir)) do repo
         paths = changed_paths(repo, id)
         @test paths == ["src/Extra.jl"]
-        @test LibGit2.status(repo, "Manifest.toml") & LibGit2.Consts.STATUS_IGNORED != 0
+        @test LibGit2.status(repo, "notes.tmp") & LibGit2.Consts.STATUS_IGNORED != 0
     end
     @test save_version(dir) === nothing
 end

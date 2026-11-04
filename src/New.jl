@@ -1,5 +1,6 @@
 #=
-New projects: the folder, Project.toml with the versions, the own module and the instructions for agents
+New projects: the folder, the project file with the versions, the own module and the instructions
+for agents
 =#
 
 """
@@ -7,9 +8,11 @@ New projects: the folder, Project.toml with the versions, the own module and the
 
 Creates an empty project in the folder `path`:
 
-- `Project.toml` with the module name `name` (by default from the folder), a new uuid,
-  `[beamletoptics] format` and the exact versions (`[compat]`, `= x.y.z`) of BeamletOptics,
-  BeamletOpticsProjects and the modules `packages` (e.g. BeamletOpticsGUI, GLMakie);
+- the project file `<folder name>.bmo`, by which people open it (see [`project_marker`](@ref)),
+  with the module name `name` (by default from the folder, see [`module_name`](@ref)), `format`
+  and the versions (`[versions]`) of BeamletOptics, BeamletOpticsProjects and the modules
+  `packages` (e.g. BeamletOpticsGUI); the folder is no Julia environment: a project is opened from
+  any environment that has these packages;
 - `src/<name>.jl` with the module `<name>` for own code;
 - `system.jl` without entries;
 - `AGENTS.md` and `CLAUDE.md` with the instructions for agents that are specific to the project,
@@ -18,18 +21,17 @@ Creates an empty project in the folder `path`:
   started in the project folder;
 - the agent skills of the installed BeamletOptics and BeamletOpticsProjects in `.claude/skills/`
   (see `install_agent_skill` of both), which `.gitignore` keeps out of the versions: they come
-  from the packages in the versions the project pins;
-- the project file `<folder name>.bmo`, by which people open it, see [`project_marker`](@ref).
+  from the installed packages.
 
 Then saves the first version, "New project", see [`save_version`](@ref): in the git repository
 that holds the folder, else in a new one in the folder.
 
-Throws if `path` is a project already.
+Throws if `path` is a project already (it has a `system.jl`).
 """
 function new_project(path::AbstractString; name::AbstractString = module_name(path),
         packages::Vector{Module} = Module[])
     path = abspath(path)
-    isfile(joinpath(path, "Project.toml")) &&
+    isfile(joinpath(path, "system.jl")) &&
         throw(ArgumentError("\"$path\" is a project already"))
     Base.isidentifier(name) || throw(ArgumentError("the name \"$name\" is not a valid module name"))
     _scaffold(path, String(name), packages)
@@ -77,16 +79,14 @@ _claude_settings() = """
 function _scaffold(path, name, packages)
     mkpath(joinpath(path, "src"))
     write_new(file, text) = isfile(joinpath(path, file)) || write(joinpath(path, file), text)
-    write_new("Project.toml", _project_toml(name, packages))
     write_new(joinpath("src", name * ".jl"), _module_template(name))
-    write_new("AGENTS.md", _agents_template(name))
+    write_new("AGENTS.md", _agents_template(name, basename(project_marker(path))))
     write_new("CLAUDE.md", "@AGENTS.md\n")
-    write_new(".gitignore", "Manifest.toml\n*.tmp\n.bmo/\n.envs/\n.claude/skills/\n")
+    write_new(".gitignore", "*.tmp\n.bmo/\n.claude/skills/\n")
     mkpath(joinpath(path, ".claude"))
     write_new(joinpath(".claude", "settings.json"), _claude_settings())
     _install_skills(joinpath(path, ".claude", "skills"))
-    marker = project_marker(path)
-    isfile(marker) || write(marker, _marker_text(splitext(basename(marker))[1]))
+    _update_marker(path, name, packages)
     return nothing
 end
 
@@ -111,114 +111,6 @@ function _install_skills(dest)
     return nothing
 end
 
-function _project_toml(name, packages)
-    mods = unique([BMO, @__MODULE__, packages...])
-    deps = Dict{String, Any}()
-    compat = Dict{String, Any}()
-    for m in mods
-        id = Base.PkgId(m)
-        id.uuid === nothing && throw(ArgumentError("$m is not a package"))
-        deps[id.name] = string(id.uuid)
-        v = pkgversion(m)
-        v === nothing || (compat[id.name] = "= $v")
-    end
-    compat["julia"] = string(VERSION.major, ".", VERSION.minor)
-    toml = Dict{String, Any}("deps" => deps, "compat" => compat,
-        "beamletoptics" => Dict{String, Any}("format" => FORMAT))
-    sources = _sources(mods)
-    isempty(sources) || (toml["sources"] = sources)
-    io = IOBuffer()
-    println(io, "name = ", repr(name))
-    println(io, "uuid = \"", uuid4(), "\"")
-    println(io, "version = \"0.1.0\"")
-    println(io)
-    TOML.print(io, toml; sorted = true)
-    return String(take!(io))
-end
-
-"""
-The `[sources]` of a new project for the packages `mods` that do not come from a registry, such
-that `Pkg.instantiate()` in the project finds them on another machine too: for a package developed
-in a local git checkout (`Pkg.develop`) the url of its remote `origin` and its commit (a warning if
-the checkout has uncommitted changes, which the project then does not have), for a package added
-by url that url and the branch or commit it was added with. Empty for packages from a registry,
-which the exact versions of `[compat]` find, as for released versions.
-"""
-function _sources(mods)
-    deps = try
-        Pkg.dependencies()
-    catch
-        Dict{Base.UUID, Any}()
-    end
-    out = Dict{String, Any}()
-    for m in mods
-        id = Base.PkgId(m)
-        info = get(deps, id.uuid, nothing)
-        src = if isnothing(info)
-            # Not in the active environment (e.g. loaded from the stack): a git checkout or nothing
-            _checkout_source(pkgdir(m))
-        elseif info.is_tracking_registry
-            nothing
-        elseif info.is_tracking_path
-            _checkout_source(info.source)
-        elseif info.is_tracking_repo
-            Dict{String, Any}("url" => info.git_source, "rev" => info.git_revision)
-        end
-        isnothing(src) || (out[id.name] = src)
-    end
-    return out
-end
-
-# Whether the commit `oid` is on a branch of `origin` that the repository knows (as of its last fetch)
-function _pushed(repo, oid)
-    for ref in LibGit2.ref_list(repo)
-        startswith(ref, "refs/remotes/origin/") || continue
-        tip = LibGit2.with(r -> LibGit2.GitHash(r), LibGit2.GitReference(repo, ref))
-        (tip == oid || LibGit2.is_ancestor_of(string(oid), string(tip), repo)) && return true
-    end
-    return false
-end
-
-"""
-The url of the remote `origin` and the commit (`HEAD`) of the git checkout of the package in the
-folder `dir`, as an entry of `[sources]`, with `subdir` if the package is not at the root of the
-repository; `nothing` if `dir` is not in a git repository with an `origin` (a folder of
-`~/.julia/packages`, or a checkout that only exists on this machine, which warns).
-"""
-function _checkout_source(dir)
-    (isnothing(dir) || !isdir(dir)) && return nothing
-    # An installed version (not a checkout), even if a folder above it is a repository
-    installed = filter(isdir, [joinpath(d, "packages") for d in DEPOT_PATH])
-    any(p -> startswith(realpath(dir), realpath(p)), installed) && return nothing
-    repo = try
-        LibGit2.GitRepoExt(dir)
-    catch
-        return nothing
-    end
-    try
-        url = try
-            LibGit2.with(LibGit2.url, LibGit2.lookup_remote(repo, "origin"))
-        catch
-            nothing
-        end
-        if isnothing(url) || isempty(url)
-            @warn "$(last(splitpath(dir))) is developed in a checkout without a remote origin; the new project can not name its source"
-            return nothing
-        end
-        LibGit2.isdirty(repo) &&
-            @warn "$(last(splitpath(dir))) has uncommitted changes; the new project pins its last commit without them"
-        head = LibGit2.head_oid(repo)
-        _pushed(repo, head) ||
-            @warn "$(last(splitpath(dir))): the commit $(string(head)[1:7]) is not on origin; the new project can be installed elsewhere only after a push"
-        src = Dict{String, Any}("url" => url, "rev" => string(head))
-        sub = relpath(realpath(dir), realpath(LibGit2.workdir(repo)))
-        sub == "." || (src["subdir"] = replace(sub, '\\' => '/'))
-        return src
-    finally
-        close(repo)
-    end
-end
-
 _module_template(name) = """
     module $name
 
@@ -229,7 +121,7 @@ _module_template(name) = """
     end
     """
 
-_agents_template(name) = """
+_agents_template(name, marker) = """
     # Project $name (BeamletOptics)
 
     An optical setup of [BeamletOptics](https://github.com/JuliaPhysics/BeamletOptics.jl) as a
@@ -240,11 +132,10 @@ _agents_template(name) = """
 
     How to work on a project (the form of `system.jl`, `load_project`, `trace`, `look`, the open
     windows, taking part, versions) is in the agent skill `beamletopticsprojects`, the optics in
-    `beamletoptics`, the window in `beamletopticsgui`. They come from the installed packages, in the
-    versions this project pins (`Project.toml`), and lie in `.claude/skills/` (not part of the
-    versions). Read them before you change the project. If one is missing or the packages were
-    updated, install them again from the packages, in this folder and in the package environment
-    of your person and machine (see "Packages"):
+    `beamletoptics`, the window in `beamletopticsgui`. They come from the installed packages and lie
+    in `.claude/skills/` (not part of the versions). Read them before you change the project. If
+    one is missing or the packages were updated, install them again from the packages, in this
+    folder and in the environment of the person (see "Environment"):
 
     ```julia
     using BeamletOptics, BeamletOpticsProjects
@@ -265,44 +156,40 @@ _agents_template(name) = """
     - `system.jl`: the setup, one line per component, source and system.
     - `src/$name.jl`: own code (module `$name`): functions that build components or groups, own
       types. Its exported names can be used in `system.jl`. The GUI never writes it.
-    - `view.toml`, `*.bmo`, `.bmo/`: belong to the windows, see the skill `beamletopticsprojects`.
-    - `Project.toml`: the packages the project needs (`[deps]`, `[compat]`) and where to get the
-      packages that do not come from a registry (`[sources]`), shared by everyone.
-    - `.envs/<person>@<machine>/`: the package environment of each person and machine (not
-      versioned); `Manifest.toml` in this folder itself is never loaded and may be deleted.
+    - `$marker`: the project file that people open. It records the module name, the newest
+      versions the project was saved with (`[versions]`) and the packages that `src/` uses
+      (`[packages]`); the saves write it, do not edit it.
+    - `view.toml`, `.bmo/`: belong to the windows, see the skill `beamletopticsprojects`.
 
-    ## Packages
+    ## Environment
 
-    Every person and machine has a package environment of its own, `.envs/<person>@<machine>/`, a
-    plain Pkg environment that has this project by `path` and its packages. Make or update it with
-    `personal_environment!` of BeamletOpticsProjects (it changes no other environment), then run
-    Julia in it; agents use the one of the person they work for:
-
-    ```
-    julia --project=. -e "using Pkg; Pkg.instantiate(); using BeamletOpticsProjects; println(personal_environment!(\\".\\"))"
-    julia --project=.envs/<person>@<machine> script.jl
-    ```
-
-    Never work with this folder itself as the project of Julia (`--project=.`) except for these two
-    cases: the first command above, and `] add` of a package that the project needs (then
-    everybody runs `personal_environment!` again; an open window says so). Two people should not
-    add packages at the same time.
+    Run Julia in the environment of the person you work for (ask them); it has BeamletOptics,
+    BeamletOpticsProjects and the packages under `[packages]` of `$marker`. Never make this folder
+    a Julia environment (no `--project=.`, no `Pkg.activate(".")`, no file of Pkg in it).
 
     ## Check
-
-    In your environment (see "Packages"):
 
     ```julia
     using BeamletOptics, BeamletOpticsProjects
     p = load_project(".")   # throws with the line of system.jl on errors
     r = trace(p, :S1)       # solves the system S1 with its sources
     r.detectors             # hits and power of each detector of S1
-    look(p)                 # the setup as text: chains of ids, distances, detectors, participants
+    look(p)                 # the setup as text: versions, chains of ids, distances, detectors, participants
     ```
     """
 
-_marker_text(name) = """
-    # BeamletOptics project "$name": open this file with BeamletOptics.
-    # The project is the folder of this file (system.jl, src/, view.toml, ...), see AGENTS.md.
-    format = $FORMAT
-    """
+# The order of the keys of the project file: the plain values first, then `[versions]`, then
+# `[packages]`, else by name
+_marker_order(k) = (k == "versions" ? 1 : k == "packages" ? 2 : 0, k)
+
+"""
+The text of the project file `file` with the content `data`: a comment line for people who open it
+in an editor, then `data` as TOML, see [`project_marker`](@ref).
+"""
+function _marker_text(file, data::AbstractDict)
+    io = IOBuffer()
+    println(io, "# BeamletOptics project \"", splitext(basename(file))[1],
+        "\": open this file with BeamletOptics.")
+    TOML.print(io, data; sorted = true, by = _marker_order)
+    return String(take!(io))
+end

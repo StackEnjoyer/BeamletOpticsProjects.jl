@@ -18,7 +18,7 @@ sys(id, members, sources = Symbol[]) =
 function project(lines...)
     dir = joinpath(mktempdir(), "Bench")
     mkpath(dir)
-    write(joinpath(dir, "Project.toml"), "name = \"Bench\"\n")
+    write(joinpath(dir, "Bench.bmo"), "name = \"Bench\"\n")
     write(joinpath(dir, "system.jl"), join(lines, "\n") * "\n")
     return load_project(dir)
 end

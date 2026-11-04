@@ -21,7 +21,7 @@ const SYSTEM = """
 
 function bench(system = SYSTEM)
     dir = mktempdir()
-    write(joinpath(dir, "Project.toml"), "name = \"Bench\"\n")
+    write(joinpath(dir, "Bench.bmo"), "name = \"Bench\"\n")
     mkpath(joinpath(dir, "src"))
     write(joinpath(dir, "src", "Bench.jl"), "module Bench\nend\n")
     write(joinpath(dir, "system.jl"), system)

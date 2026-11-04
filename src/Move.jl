@@ -27,9 +27,9 @@ An id of a system stands for its members and sources (as listed by the `@system`
 groups); an object named twice, e.g. by a system and by one of its members, moves once.
 
 The write is one [`save_project`](@ref) with the participant `by`: it throws an `ArgumentError`
-if it would change a line claimed by another participant (see [`claim!`](@ref)) and
-[`ProjectChanged`](@ref) if the files changed between loading and writing; then nothing is
-written.
+if it would change a line claimed by another participant (see [`claim!`](@ref)); then nothing is
+written. If the files changed between loading and writing, the move is done again from the files,
+up to 3 times, as by [`add!`](@ref); then it throws [`ProjectChanged`](@ref).
 
 # Examples
 
@@ -39,7 +39,10 @@ move!(".", [:G1]; rot = (0, 0, 90), by = "claude")                # G1 turned ab
 move!(".", [:L1, :L2]; rot = (0, 0, 5), pivot = :L1)              # about the position of L1
 ```
 """
-function move!(dir::AbstractString, ids::Vector{Symbol}; offset = (0, 0, 0), rot = nothing,
+move!(dir::AbstractString, ids::Vector{Symbol}; kwargs...) =
+    _retry_changed(() -> _move_once!(dir, ids; kwargs...))
+
+function _move_once!(dir::AbstractString, ids::Vector{Symbol}; offset = (0, 0, 0), rot = nothing,
         pivot = :center, by = nothing)
     p = load_project(dir)
     _move!(p, ids; offset, rot, pivot)

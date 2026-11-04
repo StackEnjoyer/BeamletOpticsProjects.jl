@@ -16,7 +16,7 @@ groups and systems are added to the loaded entries, so that the merge is tested 
 """
 function project(ys; systems = [:S1 => [:L1, :M1, :D1]], groups = Pair[], uids = Dict{Symbol, String}())
     dir = mktempdir()
-    write(joinpath(dir, "Project.toml"), "name = \"Bench\"\n")
+    write(joinpath(dir, "Bench.bmo"), "name = \"Bench\"\n")
     write(joinpath(dir, "system.jl"), join([[lens(id, y) for (id, y) in ys]; beam(:B1)], "\n") * "\n")
     p = load_project(dir)
     uid(id) = get(uids, id, lowercase(String(id)))
@@ -118,7 +118,7 @@ grp(id, members; y = 0.15) = "@group $id = [$(join(members, ", "))] pos = (0.0, 
 function folder(lines...)
     dir = joinpath(mktempdir(), "Bench")
     mkpath(joinpath(dir, "src"))
-    write(joinpath(dir, "Project.toml"), "name = \"Bench\"\n")
+    write(joinpath(dir, "Bench.bmo"), "name = \"Bench\"\n")
     write(joinpath(dir, "src", "Bench.jl"), "module Bench\nend\n")
     write(joinpath(dir, "system.jl"), join(lines, "\n") * "\n")
     return dir

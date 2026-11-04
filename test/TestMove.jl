@@ -27,7 +27,7 @@ const SYSTEM = HEADER * """
 function bench(system = SYSTEM; src = nothing)
     dir = joinpath(mktempdir(), "Bench")
     mkpath(dir)
-    write(joinpath(dir, "Project.toml"), "name = \"Bench\"\n")
+    write(joinpath(dir, "Bench.bmo"), "name = \"Bench\"\n")
     write(joinpath(dir, "system.jl"), system)
     if !isnothing(src)
         mkpath(joinpath(dir, "src"))
@@ -179,7 +179,8 @@ end
         @test entry(b, :F1).pos == (0.2, 0.01, 0.0)
         release!(dir; by = "anna@pc2")
 
-        # the own code changes the files while the project loads: ProjectChanged, nothing written
+        # the own code changes the files while the project loads (only the first time): the move is
+        # done again from the files, and moves once
         hook = """
         module Bench
         let f = joinpath(@__DIR__, "extra.jl")
@@ -188,11 +189,8 @@ end
         end
         """
         dir = bench(; src = hook)
-        before = read(joinpath(dir, "system.jl"), String)
-        @test_throws ProjectChanged move!(dir, [:F1]; offset = (0.0, 0.01, 0.0))
-        @test read(joinpath(dir, "system.jl"), String) == before
-        # the next load sees no change
         @test entry(move!(dir, [:F1]; offset = (0.0, 0.01, 0.0)), :F1).pos == (0.2, 0.01, 0.0)
+        @test isfile(joinpath(dir, "src", "extra.jl"))
     end
 end
 

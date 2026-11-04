@@ -41,7 +41,7 @@ const SKILL_DIR = joinpath(@__DIR__, "..", "skills", "beamletopticsprojects")
         format = read(joinpath(SKILL_DIR, "FORMAT.md"), String)
         example = match(r"```julia\n(@component.*?)```"s, format).captures[1]
         dir = mktempdir()
-        write(joinpath(dir, "Project.toml"), "name = \"Example\"\n")
+        write(joinpath(dir, "Example.bmo"), "name = \"Example\"\n")
         mkpath(joinpath(dir, "src"))
         write(joinpath(dir, "src", "Example.jl"), "module Example\nend\n")
         write(joinpath(dir, "system.jl"), example)

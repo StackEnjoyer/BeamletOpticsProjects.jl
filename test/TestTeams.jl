@@ -21,7 +21,7 @@ write_system(dir, lines...) = write(joinpath(dir, "system.jl"), join(lines, "\n"
 function project_dir(lines...)
     dir = joinpath(mktempdir(), "Bench")
     mkpath(joinpath(dir, "src"))
-    write(joinpath(dir, "Project.toml"), "name = \"Bench\"\n")
+    write(joinpath(dir, "Bench.bmo"), "name = \"Bench\"\n")
     write(joinpath(dir, "src", "Bench.jl"), "module Bench\nend\n")
     write_system(dir, lines...)
     return dir
@@ -35,7 +35,7 @@ system(p, name) = only(s for s in p.systems if s.name === name)
     @test teams(dir) == String[]
     draft = fork_team(dir, "t1"; by = "anna", goal = "align L1")
     @test draft == joinpath(dir, ".bmo", "drafts", "t1")
-    for f in ("system.jl", "Project.toml", joinpath("src", "Bench.jl"))
+    for f in ("system.jl", "Bench.bmo", joinpath("src", "Bench.jl"))
         @test read(joinpath(draft, f), String) == read(joinpath(dir, f), String)
         @test read(joinpath(draft, "base", f), String) == read(joinpath(dir, f), String)
     end

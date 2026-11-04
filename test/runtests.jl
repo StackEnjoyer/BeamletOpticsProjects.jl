@@ -25,5 +25,5 @@ using Test
     include(joinpath(@__DIR__, "TestMove.jl"))
     include(joinpath(@__DIR__, "TestQuery.jl"))
     include(joinpath(@__DIR__, "TestEdit.jl"))
-    include(joinpath(@__DIR__, "TestEnvironment.jl"))
+    include(joinpath(@__DIR__, "TestProjectVersions.jl"))
 end

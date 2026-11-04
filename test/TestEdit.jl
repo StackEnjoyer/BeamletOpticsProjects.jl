@@ -26,7 +26,7 @@ const SYSTEM = HEADER * """
 function bench(system = SYSTEM)
     dir = joinpath(mktempdir(), "Bench")
     mkpath(dir)
-    write(joinpath(dir, "Project.toml"), "name = \"Bench\"\n")
+    write(joinpath(dir, "Bench.bmo"), "name = \"Bench\"\n")
     write(joinpath(dir, "system.jl"), system)
     return dir
 end
@@ -297,6 +297,52 @@ end
     # without by nobody is announced
     P.add!(dir, "RoundPlanoMirror(0.0254, 0.006)"; pos = (0.4, 0.0, 0.0))
     @test sort(collect(keys(P.read_presences(dir)))) == ["claude@agent"]
+end
+
+# Constructors of the project's own code that change system.jl while the edit builds them, as an
+# open window does when it adds the machine ids of lines just written as text
+const TOUCHY = """
+    module Bench
+    using BeamletOptics
+    export changed_once, changed_always
+    touch_system(dir) = open(io -> write(io, "# a window wrote meanwhile\\n"), joinpath(dir, "system.jl"), "a")
+    function changed_once(dir)
+        flag = joinpath(dir, "changed.flag")
+        isfile(flag) || (write(flag, ""); touch_system(dir))
+        return RoundPlanoMirror(0.0254, 0.006)
+    end
+    changed_always(dir) = (touch_system(dir); RoundPlanoMirror(0.0254, 0.006))
+    end
+    """
+
+@testset "an edit is done again when the files changed meanwhile" begin
+    dir = bench()
+    mkpath(joinpath(dir, "src"))
+    write(joinpath(dir, "src", "Bench.jl"), TOUCHY)
+    # the first run loads, builds (the file changes) and fails to write; the second one writes
+    id = P.add!(dir, "changed_once($(repr(dir)))"; pos = (0.3, 0.0, 0.0))
+    @test isfile(joinpath(dir, "changed.flag"))
+    @test has(load_project(dir), id)
+    # files that change at every run: ProjectChanged after 3 runs, no line written
+    n0 = count("# a window wrote meanwhile", String(text(dir)))
+    @test_throws ProjectChanged P.add!(dir, "changed_always($(repr(dir)))")
+    @test !occursin("changed_always", String(text(dir)))
+    @test count("# a window wrote meanwhile", String(text(dir))) - n0 >= 3   # each run changed it
+
+    # the retry itself: runs again only after ProjectChanged, up to `tries` times
+    n = Ref(0)
+    @test P._retry_changed(; wait = 0) do
+        n[] += 1
+        n[] < 3 && throw(ProjectChanged(dir))
+        :done
+    end === :done
+    @test n[] == 3
+    n[] = 0
+    @test_throws ProjectChanged P._retry_changed(() -> (n[] += 1; throw(ProjectChanged(dir))); wait = 0)
+    @test n[] == 3
+    n[] = 0
+    @test_throws ArgumentError P._retry_changed(() -> (n[] += 1; throw(ArgumentError("no"))); wait = 0)
+    @test n[] == 1
 end
 
 end

@@ -8,8 +8,8 @@ draft into it (`merge_draft!`, on top of `merge_plan` and `_compose`). Every fil
 atomically or created exclusively, also on a shared drive.
 =#
 
-# The files of a project that a draft copies (and its `base/`), besides `src/`
-const _TEAM_FILES = ("system.jl", "Project.toml")
+# The files of a project that a draft copies (and its `base/`), besides `src/` and the project file
+const _TEAM_FILES = ("system.jl",)
 # How often `wait_for` looks at the board [s]
 const _BOARD_POLL = 0.5
 
@@ -20,12 +20,15 @@ _file_part(s) = replace(String(s), r"[^A-Za-z0-9_.@\-]" => "_")
 
 _exists_error(e) = e isa Base.IOError && e.code == Base.UV_EEXIST
 
-# Copies the files of the project in `from` that define the setup into the folder `to`
+# Copies the files of the project in `from` that define the setup into the folder `to`: `system.jl`,
+# `src/` and the project file under its own name (it names the module of `src/`)
 function _copy_setup(from, to)
     mkpath(to)
     for f in _TEAM_FILES
         isfile(joinpath(from, f)) && cp(joinpath(from, f), joinpath(to, f))
     end
+    marker = project_marker(from)
+    isfile(marker) && cp(marker, joinpath(to, basename(marker)))
     isdir(joinpath(from, "src")) && cp(joinpath(from, "src"), joinpath(to, "src"))
     return to
 end
@@ -34,8 +37,9 @@ end
     fork_team(dir, name; by, goal = "") -> String
 
 Forks a draft of the team `name` from the project in the folder `dir` and returns the folder of the
-draft, `<dir>/.bmo/drafts/<name>/`. It holds copies of `system.jl`, `src/` and `Project.toml`
-(it loads as a project, see [`load_project`](@ref), but has no versions), the same three in `base/`
+draft, `<dir>/.bmo/drafts/<name>/`. It holds copies of `system.jl`, `src/` and the project file
+`*.bmo` (it loads as a project, see [`load_project`](@ref), but has no git versions), the same
+three in `base/`
 (the state it was forked from, against which [`merge_draft!`](@ref) finds the changes of the team),
 `team.toml` (`by`, the participant who forked it, `created`, UTC, and `goal`), and the folders
 `board/` (see [`post!`](@ref)) and `claims/` (see [`claim!`](@ref)).

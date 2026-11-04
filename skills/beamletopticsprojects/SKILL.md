@@ -1,6 +1,6 @@
 ---
 name: beamletopticsprojects
-description: Work on a project of BeamletOptics.jl with BeamletOpticsProjects.jl (Julia): a folder with system.jl (one line per component, source and system), src/<Name>.jl and Project.toml, which people open in the GUI while agents edit it. Use when a folder has a *.bmo file or a system.jl with @component, @source, @group or @system lines, or when the user asks to load, change, trace, inspect or version such a project, or to take part in it next to the people in their windows.
+description: Work on a project of BeamletOptics.jl with BeamletOpticsProjects.jl (Julia): a folder with system.jl (one line per component, source and system), src/<Name>.jl and the project file <folder>.bmo, which people open in the GUI while agents edit it. Use when a folder has a *.bmo file or a system.jl with @component, @source, @group or @system lines, or when the user asks to load, change, trace, inspect or version such a project, or to take part in it next to the people in their windows.
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash
 metadata:
   beamletopticsprojects-version: "0.1"
@@ -12,29 +12,27 @@ BeamletOpticsProjects reads, writes, traces and versions it, also without a wind
 
 When this Skill is active:
 
-- **Run Julia in the package environment of your person and machine, `.envs/<person>@<machine>/`
-  in the project folder** (a plain Pkg environment that has the project by `path` and its
-  packages). `personal_environment!(".")` makes or updates it and returns its path; run scripts
-  with `julia --project=.envs/<person>@<machine> script.jl` (the `AGENTS.md` of the project shows
-  the first call). Use the folder itself as Julia's project (`--project=.`) only for that first
-  call and for `] add` of a package that the project needs, and only when the person asks; after
-  such a change everybody calls `personal_environment!(".")` again. A `Manifest.toml` in the
-  project folder is never loaded.
+- **Run Julia in the environment of the person you work for (ask them which one).** A project is
+  data, no Julia environment: it opens from any environment that has BeamletOptics,
+  BeamletOpticsProjects and the packages under `[packages]` of its project file `<folder>.bmo`.
+  Never make the project folder a Julia environment (no `--project=.`, no `Pkg.activate(".")`).
+  `check_versions(".")` compares the versions that the project file records with those of the
+  environment (`look(p)` shows them too): tell the person about `:older` (`] up X`) and
+  `:missing` (`] add X`) instead of changing their environment.
 - **The optics comes from the `beamletoptics` skill** (units, +y optical axis, constructors,
   `solve_system!`, detectors), the window from the `beamletopticsgui` skill. Install the missing
-  ones from the packages, in the project folder and with your package environment (so that the
-  versions of the project are loaded): `using BeamletOptics; BeamletOptics.install_agent_skill()`,
+  ones from the packages, in the project folder and with the environment of the person (so that
+  the installed versions are described): `using BeamletOptics; BeamletOptics.install_agent_skill()`,
   `using BeamletOpticsProjects; BeamletOpticsProjects.install_agent_skill()`,
   `using BeamletOpticsGUI; BeamletOpticsGUI.install_agent_skill()`. They come from the installed
-  packages in the versions the project pins, never from a copy in the versions of the project.
+  packages, never from a copy in the versions of the project.
 - This skill describes BeamletOpticsProjects **0.1** (`beamletopticsprojects-version` above). Check
-  the installed version with `julia --project=.envs/<person>@<machine> -e 'using BeamletOpticsProjects; println(pkgversion(BeamletOpticsProjects))'`.
+  the installed version with `julia --project=<environment> -e 'using BeamletOpticsProjects; println(pkgversion(BeamletOpticsProjects))'`.
   If its major or minor version differs, confirm every function with its docstring
   (`using REPL; display(@doc trace)`: without `REPL` a script prints the raw `DocStr`) and install
   the matching skill as above.
 - Use only documented API (`API.md`). **Do not invent functions or keywords.**
-- Run Julia in your package environment (`julia --project=.envs/<person>@<machine>`) after any
-  change: `load_project` must load, and `trace`/`look` show what the change did. Do not claim a
+- Run Julia in the environment of the person after any change: `load_project` must load, and `trace`/`look` show what the change did. Do not claim a
   change works when you did not run it. Loading the packages takes about 15 s per `julia` call:
   put loading, tracing, changing and tracing again into one script instead of many small calls.
 - People and agents are participants alike: announce yourself before you change the project, claim
@@ -52,10 +50,10 @@ When this Skill is active:
 
 ```text
 Bench/
-├── Bench.bmo        the project file that people open; it only marks the folder. Do not edit it.
+├── Bench.bmo        the project file that people open: the module name, the newest versions it was saved
+│                    with ([versions]) and the packages that src/ uses ([packages]). Do not edit it.
 ├── system.jl        the setup: one line per component, source, group and system (FORMAT.md)
 ├── src/Bench.jl     own code (module Bench): functions that build components, own types. The GUI never writes it.
-├── Project.toml     the exact versions of the packages ([compat]); [beamletoptics] format
 ├── view.toml        the view of the GUI (camera, colors, clip planes). Do not edit it.
 ├── AGENTS.md        what is specific to this project (CLAUDE.md points to it)
 ├── .claude/skills/  the skills, installed from the packages (not versioned)
@@ -70,7 +68,7 @@ Bench/
    ```julia
    using BeamletOptics, BeamletOpticsProjects
    p = load_project(".")     # throws with the line of system.jl on errors
-   look(p)                   # versions, participants, per system the chains of ids, distances, detectors
+   look(p)                   # prints (and returns) versions, participants, chains of ids, distances, detectors
    look(p; around = :L3)     # only the objects within 50 mm of L3 and the beams through them
    ```
 
@@ -127,7 +125,8 @@ Several people may have the project open in their own windows while you work on 
 - `save_project(p; by = "claude")` writes the whole `system.jl` from a loaded project; it throws
   `ProjectChanged` if the files changed since `p` was loaded, or if another participant is saving
   at that moment (it waits at most 2 s). Then load the project again and redo the change; never
-  force it. With `by` (your `name`) it also throws an `ArgumentError` that names the line and its
+  force it. `add!`, `set!`, `duplicate!`, `remove!` and `move!` do that themselves (up to 3
+  times), e.g. when a window adds the machine ids of lines you just wrote as text. With `by` (your `name`) it also throws an `ArgumentError` that names the line and its
   holder if the save would change a line that another participant claimed; then leave that line
   alone.
 - Each window writes `.bmo/session-<person>.md`: the selection and the recent actions of its person.

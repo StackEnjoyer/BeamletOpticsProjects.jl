@@ -13,7 +13,7 @@ lens(id, y) = "@component $id = $LENS pos = (0.0, $y, 0.0) uid = \"$(lowercase(S
 function bench()
     dir = joinpath(mktempdir(), "Bench")
     mkpath(dir)
-    write(joinpath(dir, "Project.toml"), "name = \"Bench\"\n")
+    write(joinpath(dir, "Bench.bmo"), "name = \"Bench\"\n")
     write(joinpath(dir, "system.jl"), join([lens(:L1, 0.1), lens(:M1, 0.2), lens(:N1, 0.3)], "\n") * "\n")
     return dir
 end

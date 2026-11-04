@@ -8,29 +8,34 @@ using Test
     dir = joinpath(mktempdir(), "laser-bench")
     p = new_project(dir; packages = [TOML])
     @test p.name == "Laser_bench"
-    for f in ("Project.toml", "system.jl", "AGENTS.md", "CLAUDE.md", ".gitignore",
+    for f in ("system.jl", "AGENTS.md", "CLAUDE.md", ".gitignore",
               joinpath("src", "Laser_bench.jl"), "laser-bench.bmo")
         @test isfile(joinpath(dir, f))
     end
+    # No Julia environment in the folder: the project file is the only file of metadata
+    @test !isfile(joinpath(dir, "Project.toml")) && !isfile(joinpath(dir, "Manifest.toml"))
     marker = joinpath(dir, "laser-bench.bmo")
     @test project_marker(dir) == marker
-    @test TOML.parsefile(marker)["format"] == 1
+    data = TOML.parsefile(marker)
+    @test data["format"] == 1 && data["name"] == "Laser_bench"
+    @test data["versions"] == Dict("BeamletOptics" => string(pkgversion(BeamletOptics)),
+        "BeamletOpticsProjects" => string(pkgversion(BeamletOpticsProjects)),
+        "TOML" => string(pkgversion(TOML)))
+    @test data["packages"] == Dict()
+    text = read(marker, String)
+    @test startswith(text, "# BeamletOptics project \"laser-bench\": open this file with BeamletOptics.\n")
+    # The plain values, then [versions], then [packages]
+    @test occursin(r"^format = 1\nname = \"Laser_bench\"\n\n\[versions\]\n.*\n\[packages\]"ms, text)
     # The project file opens the project; a renamed folder keeps its project file
     @test load_project(marker).path == dir
     @test project_dir(marker) == dir && project_dir(dir * "/") == dir
     moved = joinpath(dirname(dir), "renamed")
     mv(dir, moved)
     @test project_marker(moved) == joinpath(moved, "laser-bench.bmo")
+    @test BeamletOpticsProjects.project_name(moved) == "Laser_bench"
     mv(moved, dir)
     @test project_marker(joinpath(dirname(dir), "new folder")) ==
           joinpath(dirname(dir), "new folder", "new folder.bmo")
-    toml = TOML.parsefile(joinpath(dir, "Project.toml"))
-    @test toml["name"] == "Laser_bench"
-    @test toml["beamletoptics"]["format"] == 1
-    @test toml["deps"]["BeamletOptics"] == string(Base.PkgId(BeamletOptics).uuid)
-    @test toml["compat"]["BeamletOptics"] == "= $(pkgversion(BeamletOptics))"
-    @test toml["compat"]["BeamletOpticsProjects"] == "= $(pkgversion(BeamletOpticsProjects))"
-    @test haskey(toml["deps"], "TOML")
     @test read(joinpath(dir, "CLAUDE.md"), String) == "@AGENTS.md\n"
     # The empty project loads, and its module is there
     q = load_project(dir)
@@ -38,6 +43,11 @@ using Test
     @test isdefined(q.mod, :Laser_bench)
     @test_throws ArgumentError new_project(dir)
     @test_throws ArgumentError new_project(joinpath(mktempdir(), "x"); name = "not valid")
+    # A folder with other files but without system.jl becomes a project
+    other = mktempdir()
+    write(joinpath(other, "notes.txt"), "x")
+    @test new_project(other; name = "Other").name == "Other"
+    @test read(joinpath(other, "notes.txt"), String) == "x"
 end
 
 @testset "AGENTS.md: only what is specific to the project" begin
@@ -53,9 +63,14 @@ end
     for m in ("BeamletOptics", "BeamletOpticsProjects", "BeamletOpticsGUI")
         @test occursin("$m.install_agent_skill()", agents)
     end
-    # in the package environment of the person and machine, not the default one or the folder
-    @test occursin("personal_environment!", agents) && occursin("--project=.envs/<person>@<machine>", agents)
-    @test ".envs/" in split(read(joinpath(dir, ".gitignore"), String), '\n')
+    # in the environment of the person, never one in the folder
+    env = match(r"## Environment\n(.*?)(\n## |\z)"s, agents).captures[1]
+    @test occursin("environment of the person you work for", env)
+    @test occursin("`[packages]` of `$(basename(dir)).bmo`", env)
+    @test occursin("Never make this folder", env)
+    @test !occursin("Project.toml", agents) && !occursin(".envs", agents)
+    @test split(read(joinpath(dir, ".gitignore"), String), '\n') ==
+          ["*.tmp", ".bmo/", ".claude/skills/", ""]
     check = match(r"## Check\n(.*?)(\n## |\z)"s, agents).captures[1]
     for key in ("p = load_project(", "r = trace(p, :S1)", "r.detectors", "look(p)")
         @test occursin(key, check)
@@ -72,7 +87,6 @@ end
         """)
     agents = read(joinpath(dir, "AGENTS.md"), String)
     code = match(r"## Check\n.*?```julia\n(.*?)```"s, agents).captures[1]
-    @test occursin("Pkg.instantiate()", agents)
     m = Module()
     text = redirect_stdout(devnull) do
         cd(() -> include_string(m, code), dir)
@@ -84,8 +98,7 @@ end
 @testset "new_project installs the skills of the packages once" begin
     skill(dir, name) = joinpath(dir, ".claude", "skills", name, "SKILL.md")
     dir = mktempdir()
-    # The installers are silent (a warning about a checkout of this package with uncommitted
-    # changes, see `_checkout_source`, may come in a development environment)
+    # The installers are silent
     logs, _ = Test.collect_test_logs(() -> new_project(dir; name = "Example"))
     @test !any(l -> occursin("Installed", string(l.message)), logs)
     @test read(skill(dir, "beamletoptics"), String) ==
@@ -108,46 +121,30 @@ end
     @test isfile(skill(dir, "beamletopticsprojects"))
 end
 
-@testset "[sources] for packages that do not come from a registry" begin
-    P = BeamletOpticsProjects
-    # A local checkout with an origin: its url and commit, the subdir of a package below the root
-    root = mktempdir()
-    repo = LibGit2.init(root)
-    LibGit2.with(r -> nothing, LibGit2.GitRemote(repo, "origin", "https://example.invalid/Pkg.jl"))
-    mkpath(joinpath(root, "lib", "Sub"))
-    write(joinpath(root, "lib", "Sub", "a.jl"), "x = 1\n")
-    LibGit2.add!(repo, "lib/Sub/a.jl")
-    sig = LibGit2.Signature("Test", "test@localhost")
-    head = string(LibGit2.commit(repo, "first"; author = sig, committer = sig))
-    # Not pushed yet: a warning; once origin has the commit: none
-    @test (@test_logs (:warn, r"not on origin") P._checkout_source(root))["rev"] == head
-    close(repo)
-    # As a fetch leaves it: the branch of origin at the commit
-    mkpath(joinpath(root, ".git", "refs", "remotes", "origin"))
-    write(joinpath(root, ".git", "refs", "remotes", "origin", "main"), head * "\n")
-    @test (@test_logs P._checkout_source(root)) ==
-          Dict("url" => "https://example.invalid/Pkg.jl", "rev" => head)
-    sub = P._checkout_source(joinpath(root, "lib", "Sub"))
-    @test sub["rev"] == head && sub["subdir"] == "lib/Sub"
-    # Uncommitted changes: the commit, with a warning
-    write(joinpath(root, "lib", "Sub", "a.jl"), "x = 2\n")
-    @test_logs (:warn, r"uncommitted changes") P._checkout_source(root)
-    # Without an origin: nothing, with a warning; an installed version or no repository: nothing
-    lone = mktempdir()
-    close(LibGit2.init(lone))
-    @test (@test_logs (:warn, r"without a remote origin") P._checkout_source(lone)) === nothing
-    @test P._checkout_source(mktempdir()) === nothing
-    @test P._checkout_source(joinpath(first(DEPOT_PATH), "packages")) === nothing
-    # A package from a registry gets no entry
-    @test isempty(P._sources([TOML]))
-    # BeamletOptics of the test environment is added by url: url and branch, also in Project.toml
-    src = P._sources([BeamletOptics])
-    @test src["BeamletOptics"]["url"] == "https://github.com/JuliaPhysics/BeamletOptics.jl"
-    @test haskey(src["BeamletOptics"], "rev")
+@testset "a new project loads in an environment with only BeamletOptics and BeamletOpticsProjects" begin
     dir = joinpath(mktempdir(), "Bench")
     new_project(dir)
-    toml = TOML.parsefile(joinpath(dir, "Project.toml"))
-    @test toml["sources"]["BeamletOptics"] == src["BeamletOptics"]
+    # An environment of its own that has only the two packages, resolved as for the tests
+    env = mktempdir()
+    uuid(m) = string(Base.PkgId(m).uuid)
+    write(joinpath(env, "Project.toml"), """
+        [deps]
+        BeamletOptics = "$(uuid(BeamletOptics))"
+        BeamletOpticsProjects = "$(uuid(BeamletOpticsProjects))"
+        """)
+    manifest = read(Base.project_file_manifest_path(Base.active_project()), String)
+    root = replace(pkgdir(BeamletOpticsProjects), '\\' => '/')
+    write(joinpath(env, "Manifest.toml"), replace(manifest, "path = \".\"" => "path = \"$root\""))
+    code = """
+        using BeamletOptics, BeamletOpticsProjects
+        p = load_project(ARGS[1])
+        print(p.name, " ", isempty(p.entries), " ", Base.active_project())
+        """
+    # Without the default environment of the user
+    sep = Sys.iswindows() ? ";" : ":"
+    cmd = addenv(`$(Base.julia_cmd()) --startup-file=no --project=$env -e $code $dir`,
+        "JULIA_LOAD_PATH" => string("@", sep, "@stdlib"))
+    @test read(cmd, String) == string("Bench true ", joinpath(env, "Project.toml"))
 end
 
 end

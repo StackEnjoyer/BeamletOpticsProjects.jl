@@ -149,9 +149,14 @@ end
     save_project(project, path; packages = Module[], force = false, by = nothing) -> String
 
 Writes `system.jl` of `project` (in the folder `path`, which becomes the folder of the project)
-and returns its path. A folder that is not a project yet gets the files of [`new_project`](@ref),
-whose `Project.toml` records the versions of BeamletOptics, BeamletOpticsProjects and `packages`,
-and its first version (see [`save_version`](@ref)).
+and returns its path. A folder that is not a project yet (it has no `system.jl`) gets the files of
+[`new_project`](@ref) and its first version (see [`save_version`](@ref)).
+
+Every save raises the versions that the project file records (see [`project_marker`](@ref)): per
+package the higher of the recorded version and the one of this session, for BeamletOptics,
+BeamletOpticsProjects and `packages` (`[versions]`) and for the packages that the own code in
+`src/` uses now (`[packages]`, found from its `using` and `import`). The project file is written
+only if this changes it.
 
 Throws [`ProjectChanged`](@ref) and writes nothing if the files changed since the project was
 loaded or saved (its `stamp`, see [`project_stamp`](@ref)), unless `force` is `true`. Afterwards
@@ -176,15 +181,14 @@ function save_project(p::Project; packages::Vector{Module} = Module[], force::Bo
         force || isnothing(p.stamp) || !isfile(file) ||
             _stamp(files) == p.stamp || throw(ProjectChanged(p.path))
         _give_uids!(p)
-        fresh = !isfile(project_file(p, "Project.toml"))
+        fresh = !isfile(file)
         fresh && _scaffold(p.path, p.name, packages)
         # The code of a new project is part of its stamp
         fresh && (files = _stamp_files(p.path))
-        # A project of the time before project files
-        marker = project_marker(p.path)
-        isfile(marker) || write(marker, _marker_text(splitext(basename(marker))[1]))
         text = system_code(p)
         isnothing(by) || _check_claims(p.path, String(by), text)
+        # The versions of this session and the packages of `src/` (not part of the stamp)
+        _update_marker(p.path, p.name, packages)
         # On a shared drive the others' reads can block the replace for a while (see
         # `_write_or_overwrite`); the write lock keeps other writers out meanwhile
         _write_or_overwrite(file, text; tries = 20, wait = 0.1)
@@ -409,4 +413,118 @@ function _write_or_overwrite(file, text; move = _rename, tries::Int = 10, wait::
         end
     end
     return file
+end
+
+#=
+The project file: the versions the project was saved with and the packages of its own code
+=#
+
+"""
+Writes the project file of the project in the folder `dir` (see [`project_marker`](@ref); a new one
+is `<folder name>.bmo`), keeping what it has: `format`, `name` (the module name `name` if it has
+none), `[versions]` raised to the versions of BeamletOptics, BeamletOpticsProjects and `packages` in
+this session (the higher of the recorded and the installed version per package), and `[packages]`
+the packages that the own code in `src/` uses now (see `_used_packages`), each with the higher of
+its recorded and its installed version. Writes the file only if its content changes, so that the
+watchers of the folder see no change of a save that changed no version. Returns its path.
+"""
+function _update_marker(dir, name, packages)
+    file = project_marker(dir)
+    old = _read_marker(dir)
+    data = Dict{String, Any}(old)
+    get!(data, "format", FORMAT)
+    own = get(data, "name", nothing)
+    (own isa AbstractString && !isempty(own)) || (data["name"] = own = String(name))
+    versions = _string_table(get(data, "versions", nothing))
+    for m in unique!(Module[BMO, @__MODULE__, packages...])
+        v = pkgversion(m)
+        isnothing(v) && continue
+        k = string(nameof(m))
+        versions[k] = _raised(get(versions, k, ""), string(v))
+    end
+    data["versions"] = versions
+    recorded = _string_table(get(data, "packages", nothing))
+    data["packages"] = Dict{String, String}(k => _raised(get(recorded, k, ""), _used_version(k))
+                                            for k in _used_packages(dir, (own, String(name))))
+    (isfile(file) && data == old) && return file
+    _write_or_overwrite(file, _marker_text(file, data); tries = 20, wait = 0.1)
+    return file
+end
+
+# The higher of the versions `a` and `b` (strings); one that is no version (e.g. `""`) loses
+function _raised(a::AbstractString, b::AbstractString)
+    va, vb = _version_or_nothing(a), _version_or_nothing(b)
+    isnothing(va) && return isnothing(vb) ? String(a) : String(b)
+    isnothing(vb) && return String(a)
+    return vb > va ? String(b) : String(a)
+end
+
+"""
+The version of the package `name` in this session as a string, `""` if it is not known: of a loaded
+package of that name, else of the package that the active environment has (see
+`_installed_version`).
+"""
+function _used_version(name::AbstractString)
+    for m in Base.loaded_modules_array()
+        string(nameof(m)) == name || continue
+        v = pkgversion(m)
+        isnothing(v) || return string(v)
+    end
+    _, v = _installed_version(name)
+    return isnothing(v) ? "" : string(v)
+end
+
+# Names in `using` and `import` that are no packages of `[packages]`
+const _NOT_PACKAGES = ("Base", "Core", "Main")
+
+"""
+The names of the packages that the own code of the project in the folder `dir` uses: the first name
+of every `using` and `import` in the `.jl` files of `src/` (without files and folders whose name
+starts with `.`, as for [`project_stamp`](@ref)), without relative ones (`using .X`), `Base`,
+`Core`, `Main`, BeamletOptics, BeamletOpticsProjects and the names `own` (the project's own
+module). A file that does not parse is skipped.
+"""
+function _used_packages(dir, own)
+    names = Set{String}()
+    src = joinpath(dir, "src")
+    isdir(src) || return names
+    for (root, dirs, files) in walkdir(src)
+        filter!(d -> !startswith(d, '.'), dirs)
+        for f in files
+            (startswith(f, '.') || !endswith(f, ".jl")) && continue
+            ex = try
+                Meta.parseall(read(joinpath(root, f), String); filename = f)
+            catch e
+                e isa InterruptException && rethrow()
+                continue
+            end
+            _collect_imports!(names, ex)
+        end
+    end
+    setdiff!(names, (_NOT_PACKAGES..., string(nameof(BMO)), string(nameof(@__MODULE__)), own...))
+    return names
+end
+
+# Adds the first name of every `using` and `import` in the expression `ex` to `names`
+function _collect_imports!(names, ex)
+    ex isa Expr || return names
+    if ex.head === :using || ex.head === :import
+        for a in ex.args
+            root = _import_root(a)
+            isnothing(root) || push!(names, root)
+        end
+    elseif ex.head !== :quote
+        foreach(a -> _collect_imports!(names, a), ex.args)
+    end
+    return names
+end
+
+# The first name of the path of one argument of `using`/`import` (`A.B: c`, `A as B`), `nothing`
+# for a relative path (`.X`)
+function _import_root(a)
+    a isa Expr || return nothing
+    (a.head === :(:) || a.head === :as) && return _import_root(a.args[1])
+    (a.head === :. && !isempty(a.args)) || return nothing
+    r = a.args[1]
+    return r isa Symbol && r !== :. ? String(r) : nothing
 end

@@ -29,7 +29,7 @@ end
 
 function project_dir(system = SYSTEM; mod = MODULE)
     dir = mktempdir()
-    write(joinpath(dir, "Project.toml"), "name = \"Bench\"\n")
+    write(joinpath(dir, "Bench.bmo"), "name = \"Bench\"\n")
     mkpath(joinpath(dir, "src"))
     write(joinpath(dir, "src", "Bench.jl"), mod)
     write(joinpath(dir, "system.jl"), system)

@@ -2,8 +2,9 @@
     BeamletOpticsProjects
 
 Projects of BeamletOptics: a folder that holds an optical setup as code (`system.jl`), own code
-(`src/<Name>.jl`) and the versions it was made with (`Project.toml`). The GUI saves to and opens
-from it; agents edit `system.jl` and `src/` directly.
+(`src/<Name>.jl`) and its project file (`<folder name>.bmo`, which records the versions it was
+saved with). The GUI saves to and opens from it; agents edit `system.jl` and `src/` directly. A
+project is no Julia environment: it is opened from any environment that has the packages it needs.
 
 See [`load_project`](@ref), [`save_project`](@ref), [`new_project`](@ref) and the macros
 [`@component`](@ref), [`@source`](@ref) and [`@system`](@ref).
@@ -14,7 +15,6 @@ using BeamletOptics
 using Dates: DateTime, unix2datetime
 using LibGit2
 using LinearAlgebra
-using Pkg: Pkg
 using SHA
 using TOML
 using UUIDs
@@ -27,12 +27,15 @@ export Project, Entry, SystemEntry, GroupEntry, new_project, load_project, save_
        EntryChange, SystemChange, GroupChange, copy_code, save_version, version_summary, versions, trace, look,
        announce, leave, fork_team, teams, post!, board, claim!, release!, claims, wait_for, merge_draft!,
        evaluate, move!, add!, set!, duplicate!, remove!, members, sources, pose, moved,
-       personal_environment!
+       project_versions, check_versions, VersionCheck
 public project_name, module_name, normalize_code, EXTENSION, same_entry, same_system, same_group, new_uid, match_entries,
        install_agent_skill, person, presence_file, session_file, write_presence, read_presences, alive,
        merge_plan, compose
 
-"""Version of the format of `system.jl`, written to `[beamletoptics] format` of `Project.toml`."""
+"""
+Version of the format of `system.jl`, written to `format` of the project file (see
+[`project_marker`](@ref)).
+"""
 const FORMAT = 1
 
 """
@@ -206,6 +209,5 @@ include("Guards.jl")
 include("Move.jl")
 include("Query.jl")
 include("Edit.jl")
-include("Environment.jl")
 
 end

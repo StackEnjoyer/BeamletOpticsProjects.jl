@@ -5,7 +5,7 @@ using LinearAlgebra
 using Test
 
 const BASE = """
-@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, λ -> 1.5) pos = (0.0, 0.1, 0.0)
+@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5)) pos = (0.0, 0.1, 0.0)
 @component D1 = Detector(0.05) pos = (0.0, 0.15, 0.0)
 @source B1 = GaussianBeamlet([0.0, 0.0, 0.0], [0.0, 1.0, 0.0], 1.064e-6, 1.0e-3)
 @system S1 = [L1, D1] sources = [B1]

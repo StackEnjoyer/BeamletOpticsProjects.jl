@@ -5,7 +5,7 @@ using LinearAlgebra
 using Test
 
 const SYSTEM = """
-@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, λ -> 1.5) pos = (0.0, 0.1, 0.0)
+@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5)) pos = (0.0, 0.1, 0.0)
 @component D1 = Detector(0.05) pos = (0.0, 0.15, 0.0)
 @component D2 = Detector(0.01) pos = (0.2, 0.15, 0.0)
 @component M1 = RoundPlanoMirror(0.0254, 0.006) pos = (0.0, 0.3, 0.0)
@@ -118,7 +118,7 @@ end
     @test_throws KeyError trace(p, :S9)
 
     @testset "in the expression that loads the project" begin
-        # the refractive index `λ -> 1.5` is defined while the expression runs
+        # the refractive index `ConstantRefractiveIndex(1.5)` is defined while the expression runs
         m = Module()
         Core.eval(m, :(using BeamletOptics, BeamletOpticsProjects))
         r = Core.eval(m, :(trace(load_project($(p.path)), :S1)))

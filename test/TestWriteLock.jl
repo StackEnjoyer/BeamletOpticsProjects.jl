@@ -3,7 +3,7 @@ module TestWriteLock
 using BeamletOptics, BeamletOpticsProjects
 using Test
 
-const LENS = "SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5)"
+const LENS = "SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5))"
 lens(id, y) = "@component $id = $LENS pos = (0.0, $y, 0.0) uid = \"$(lowercase(String(id)))\""
 
 @testset "two processes save at the same time: no lost update" begin

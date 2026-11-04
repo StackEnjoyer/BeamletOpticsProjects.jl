@@ -11,7 +11,7 @@ const HEADER = "# BeamletOptics project \"Bench\" (format 1). Agents: see AGENTS
 
 # G2 holds the group G1 and M2; F1, D1 and the source B1 are in no group
 const SYSTEM = HEADER * """
-@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5) pos = (0.0, 0.1, 0.0) label = "Collimator" uid = "u-l1"
+@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5)) pos = (0.0, 0.1, 0.0) label = "Collimator" uid = "u-l1"
 @component M1 = RoundPlanoMirror(0.0254, 0.006) pos = (0.0, 0.2, 0.0) rot = (0.0, 0.0, 45.0) uid = "u-m1"
 @component M2 = RoundPlanoMirror(0.0254, 0.006) pos = (0.1, 0.2, 0.0) rot = (0.0, 0.0, -45.0) uid = "u-m2"
 @component D1 = Detector(0.02) pos = (0.0, 0.3, 0.0) uid = "u-d1"
@@ -148,9 +148,9 @@ end
         e = entry(b, :F1)
         @test e.pos == (0.3, 0.0, 0.0) && e.rot == (0.0, 0.0, 30.0) && e.uid == "u-f1"
         # code: the object is built again
-        b = P.set!(dir, :L1; code = "SphericalLens(0.05, -0.05, 0.006, 0.0254, 1.5)")
+        b = P.set!(dir, :L1; code = "SphericalLens(0.05, -0.05, 0.006, 0.0254, ConstantRefractiveIndex(1.5))")
         e = entry(b, :L1)
-        @test e.code == :(SphericalLens(0.05, -0.05, 0.006, 0.0254, 1.5))
+        @test e.code == :(SphericalLens(0.05, -0.05, 0.006, 0.0254, ConstantRefractiveIndex(1.5)))
         @test e.pos == (0.0, 0.1, 0.0) && e.label == "Collimator" && e.uid == "u-l1"
         # label: "" removes it; of a group and a system too
         @test entry(P.set!(dir, :L1; label = ""), :L1).label === nothing

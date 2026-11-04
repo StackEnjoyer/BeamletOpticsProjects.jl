@@ -8,7 +8,7 @@ const P = BeamletOpticsProjects
 
 const SYSTEM = """
 # BeamletOptics project "Bench" (format 1). Agents: see AGENTS.md.
-@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, (λ->1.5)) pos = (0.0, 0.1, 0.0) catalog = ("Spherical lens", ["50", "-50", "5", "25.4", "1.5"])
+@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5)) pos = (0.0, 0.1, 0.0) catalog = ("Spherical lens", ["50", "-50", "5", "25.4", "1.5"])
 @component M1 = RightAnglePrismMirror(0.025, 0.025) pos = (0.0, 0.2, 0.0) rot = (0.0, 0.0, 90.0)
 @component L2 = bench_lens(0.1) pos = (0.03, 0.2, 0.0) rot = (12.5, -3.25, 37.0)
 @component D1 = Detector(0.02) pos = (0.1, 0.2, 0.0)
@@ -23,7 +23,7 @@ const MODULE = """
 module Bench
 using BeamletOptics
 export bench_lens
-bench_lens(f) = SphericalLens(f, -f, 0.004, 0.0254, 1.5)
+bench_lens(f) = SphericalLens(f, -f, 0.004, 0.0254, ConstantRefractiveIndex(1.5))
 end
 """
 
@@ -89,7 +89,7 @@ end
         text = join(["# header", lines...], "\n") * "\n"
         return message(() -> load_project(project_dir(text)))
     end
-    lens = "@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5)"
+    lens = "@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5))"
     beam = "@source B1 = Beam([0.0, 0.0, 0.0], [0.0, 1.0, 0.0], 1.0e-6)"
     m = load_with(lens, lens)
     @test occursin("`L1` is used twice", m) && occursin("system.jl:3", m)
@@ -101,13 +101,13 @@ end
     @test occursin("`B1` is a source", m)
     m = load_with(lens, "@component L2 = SphericalLens(0.05, -0.05,")
     @test occursin("system.jl:3", m)
-    m = load_with("@component L1 SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5)")
+    m = load_with("@component L1 SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5))")
     @test occursin("system.jl:2", m) && occursin("name = ...", m)
     @test_throws ArgumentError load_project(mktempdir())
 end
 
 @testset "a file half written by another participant is loaded again" begin
-    whole = "# header\n@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5)\n"
+    whole = "# header\n@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5))\n"
     dir = project_dir(whole[1:end-30])
     file = joinpath(dir, "system.jl")
     # the writer finishes while the first load fails
@@ -124,8 +124,8 @@ end
 @testset "a system before its members" begin
     p = load_project(project_dir("""
         @system S1 = [L1, T1] sources = [B1]
-        @component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5)
-        @component T1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5)
+        @component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5))
+        @component T1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5))
         @source B1 = Beam([0.0, 0.0, 0.0], [0.0, 1.0, 0.0], 1.0e-6)
         """))
     @test p[:T1] in p[:S1].objects && p[:L1] in p[:S1].objects
@@ -135,7 +135,7 @@ end
     # A plain include builds and poses the objects and binds them to their names
     mod = Module()
     Core.eval(mod, :(using BeamletOptics, BeamletOpticsProjects))
-    Core.eval(mod, :(bench_lens(f) = SphericalLens(f, -f, 0.004, 0.0254, 1.5)))
+    Core.eval(mod, :(bench_lens(f) = SphericalLens(f, -f, 0.004, 0.0254, ConstantRefractiveIndex(1.5))))
     Base.include_string(mod, SYSTEM, "system.jl")
     @test BeamletOptics.position(mod.L1) == [0.0, 0.1, 0.0]
     @test mod.S1 isa System && mod.L2 in mod.S1.objects

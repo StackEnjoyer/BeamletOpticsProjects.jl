@@ -11,7 +11,7 @@ const HEADER = "# BeamletOptics project \"Bench\" (format 1). Agents: see AGENTS
 
 # G2 holds the group G1 and M2; F1, D1 and the source B1 are in no group
 const SYSTEM = HEADER * """
-@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5) pos = (0.0, 0.1, 0.0) uid = "u-l1"
+@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5)) pos = (0.0, 0.1, 0.0) uid = "u-l1"
 @component M1 = RoundPlanoMirror(0.0254, 0.006) pos = (0.0, 0.2, 0.0) rot = (0.0, 0.0, 45.0) uid = "u-m1"
 @component M2 = RoundPlanoMirror(0.0254, 0.006) pos = (0.1, 0.2, 0.0) rot = (0.0, 0.0, -45.0) uid = "u-m2"
 @component D1 = Detector(0.02) pos = (0.0, 0.3, 0.0) uid = "u-d1"

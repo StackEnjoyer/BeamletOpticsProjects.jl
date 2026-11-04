@@ -9,7 +9,7 @@ const BMO = BeamletOptics
 
 
 const SYSTEM = """
-@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, λ -> 1.5) pos = (0.0, 0.1, 0.0) rot = (0.0, 0.0, 30.0)
+@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5)) pos = (0.0, 0.1, 0.0) rot = (0.0, 0.0, 30.0)
 @component M1 = RoundPlanoMirror(0.0254, 0.006) pos = (0.0, 0.3, 0.0)
 @component M2 = RoundPlanoMirror(0.0254, 0.006) pos = (0.1, 0.3, 0.0)
 @component D1 = Detector(0.05) pos = (0.0, 0.15, 0.0)

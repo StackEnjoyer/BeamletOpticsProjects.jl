@@ -14,7 +14,7 @@ end
 kinds(d) = [(c.kind, something(c.new, c.old).name) for c in d.entries]
 skinds(d) = [(c.kind, something(c.new, c.old).name) for c in d.systems]
 
-const LENS = "SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5)"
+const LENS = "SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5))"
 const BASE = """
     @component L1 = $LENS pos = (0.0, 0.1, 0.0) uid = "a"
     @component M1 = RoundPlanoMirror(0.0254, 0.006) pos = (0.0, 0.2, 0.0) uid = "b"

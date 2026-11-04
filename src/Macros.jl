@@ -357,7 +357,7 @@ end
 """
     normalize_code(ex)
 
-`ex` without line numbers and with the bodies `begin x end` of short functions such as `λ -> 1.5`
+`ex` without line numbers and with the bodies `begin x end` of short functions such as `x -> 2x`
 unwrapped, so that it prints on one line and reads back the same.
 """
 function normalize_code(@nospecialize(ex))

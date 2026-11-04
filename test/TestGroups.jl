@@ -11,7 +11,7 @@ const HEADER = "# BeamletOptics project \"Bench\" (format 1). Agents: see AGENTS
 
 # Inner group G1 first, G2 holds G1 and M2; the system lists the outermost group G2
 const SYSTEM = HEADER * """
-@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5) pos = (0.0, 0.1, 0.0) uid = "u-l1"
+@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5)) pos = (0.0, 0.1, 0.0) uid = "u-l1"
 @component M1 = RoundPlanoMirror(0.0254, 0.006) pos = (0.0, 0.2, 0.0) rot = (0.0, 0.0, 45.0) uid = "u-m1"
 @component M2 = RoundPlanoMirror(0.0254, 0.006) pos = (0.1, 0.2, 0.0) rot = (0.0, 0.0, -45.0) uid = "u-m2"
 @component D1 = Detector(0.02) pos = (0.0, 0.3, 0.0) uid = "u-d1"
@@ -158,7 +158,7 @@ end
     m = Module()
     Core.eval(m, :(using BeamletOptics, BeamletOpticsProjects))
     Core.eval(m, quote
-        @component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5) pos = (0.0, 0.1, 0.0)
+        @component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5)) pos = (0.0, 0.1, 0.0)
         @component M1 = RoundPlanoMirror(0.0254, 0.006) pos = (0.0, 0.2, 0.0)
         @group G1 = [L1, M1] pos = (0.0, 0.15, 0.0) rot = (0.0, 0.0, 90.0)
         @system S1 = [G1]
@@ -173,7 +173,7 @@ end
 
 @testset "@component of an ObjectGroup as before" begin
     text = HEADER * """
-    @component G1 = ObjectGroup([SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5), RoundPlanoMirror(0.0254, 0.006)]) pos = (0.0, 0.1, 0.0) uid = "u-g1"
+    @component G1 = ObjectGroup([SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5)), RoundPlanoMirror(0.0254, 0.006)]) pos = (0.0, 0.1, 0.0) uid = "u-g1"
     @system S1 = [G1] uid = "u-s1"
     """
     p = load_project(project_dir(text))

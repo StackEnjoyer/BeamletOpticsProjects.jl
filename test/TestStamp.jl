@@ -33,7 +33,7 @@ end
 @testset "save_project checks the stamp" begin
     dir = mktempdir()
     new_project(dir; name = "Bench")
-    lens = "@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5)\n"
+    lens = "@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5))\n"
     write(joinpath(dir, "system.jl"), lens)
     p = load_project(dir)
     @test p.stamp == project_stamp(dir)
@@ -41,7 +41,7 @@ end
     save_project(p)
     @test p.stamp == project_stamp(dir)
     # an agent changes the file: not saved, nothing written
-    agent = lens * "@component L2 = SphericalLens(0.1, -0.1, 0.005, 0.0254, 1.5)\n"
+    agent = lens * "@component L2 = SphericalLens(0.1, -0.1, 0.005, 0.0254, ConstantRefractiveIndex(1.5))\n"
     write(joinpath(dir, "system.jl"), agent)
     err = try
         save_project(p)
@@ -79,10 +79,10 @@ const AFTER_RENAME = Ref{Any}(Returns(nothing))
 @testset "the stamp of a save is that of the text it wrote" begin
     dir = mktempdir()
     new_project(dir; name = "Bench")
-    lens = "@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5)\n"
+    lens = "@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5))\n"
     write(joinpath(dir, "system.jl"), lens)
     p = load_project(dir)
-    agent = lens * "@component L2 = SphericalLens(0.1, -0.1, 0.005, 0.0254, 1.5)\n"
+    agent = lens * "@component L2 = SphericalLens(0.1, -0.1, 0.005, 0.0254, ConstantRefractiveIndex(1.5))\n"
     # An agent's edit (without the lock) lands right after the save renamed system.jl into place
     @eval P _rename(from, to; force = true) = (Base.rename(from, to); $(AFTER_RENAME)[](to); nothing)
     try

@@ -4,7 +4,7 @@ using BeamletOptics, BeamletOpticsProjects
 using Test
 
 const SYSTEM = """
-@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5) pos = (0.0, 0.1, 0.0)
+@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5)) pos = (0.0, 0.1, 0.0)
 @component D1 = Detector(0.05) pos = (0.0, 0.15, 0.0)
 @component D2 = Detector(0.05) pos = (0.0, 0.3, 0.0)
 @component M1 = RoundPlanoMirror(0.0254, 0.006) pos = (0.0, 0.5, 0.0)

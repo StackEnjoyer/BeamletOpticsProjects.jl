@@ -19,7 +19,7 @@ Solves the system with the id `system` of `project` (e.g. `:S1`) with the source
   `@component` or `@source` line, for an object inside a group the id of the outermost group that
   holds it, and `nothing` for a final segment without a hit (or an object not in the project).
 - `detectors`: for every member of the system that is a `Detector`, by its id, the number of its
-  hits (`BeamletOptics.hit_count`) and its `optical_power` [W] (`0.0` without hits). The hits of
+  hits (`length` of the detector) and its `optical_power` [W] (`0.0` without hits). The hits of
   rays (`Beam`) carry no power: `power` is `nothing` for them, not `0.0`.
 - `warnings`: the warnings (and errors) that BeamletOptics logged during the solve (e.g. a violation
   of the Lagrange invariant), in order, as `"message (Module)"`. They are collected instead of
@@ -49,7 +49,7 @@ r.segments[end].object  # the object hit at the end of the last segment
 function trace(p::Project, system::Symbol; flen::Real = 0.1)
     s = _system_entry(p, system)
     # The objects may call functions that were defined after this call started, e.g. the
-    # refractive index `λ -> 1.5` of a lens in `trace(load_project("."), :S1)`
+    # glass that the module of the project defines, in `trace(load_project("."), :S1)`
     return Base.invokelatest(_trace, p, s, flen)
 end
 
@@ -131,7 +131,7 @@ function _detector_readout(p::Project, s::SystemEntry)
     for id in _leaf_names(p, s.members)
         d = p[id]
         d isa BMO.Detector || continue
-        n = BMO.hit_count(d)
+        n = length(d)
         # the hits of rays have no power (their sum is a count without a unit)
         power = n == 0 ? 0.0 :
                 eltype(BMO.hits(d)) <: BMO.AbstractRayHit ? nothing :

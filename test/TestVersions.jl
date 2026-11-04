@@ -7,7 +7,7 @@ using Test
 
 const P = BeamletOpticsProjects
 
-lens(name, rest = "") = "@component $name = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5)$rest"
+lens(name, rest = "") = "@component $name = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5))$rest"
 system_file(lines...) = join(["# BeamletOptics project \"X\" (format 1). Agents: see AGENTS.md.",
                               lines...], "\n") * "\n"
 
@@ -183,14 +183,14 @@ end
         lens(:L1, " pos = (0.0, 0.1, 0.0) rot = (0.0, 0.0, 90.0)" * u(1)),  # moved
         lens(:L7, u(2)),                                                  # renamed
         lens(:L3, " label = \"Kollimator\"" * u(3)),                     # changed: label
-        "@component L4 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.6)" * u(4),  # changed: code
+        "@component L4 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.6))" * u(4),  # changed: code
         lens(:L8, " pos = (0.0, 0.3, 0.0)"),                             # added
         "@system S1 = [L1, L7]" * u(6)))                                  # changed: members
     @test version_summary(dir) == "added L8; removed L5; renamed L2 to L7; moved L1; changed L3, L4, S1"
     # A line without uid is paired by its id
     save_version(dir)
-    write(file, replace(read(file, String), "L8 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5) pos = (0.0, 0.3, 0.0)" =>
-                                             "L8 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5) pos = (0.0, 0.4, 0.0)"))
+    write(file, replace(read(file, String), "L8 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5)) pos = (0.0, 0.3, 0.0)" =>
+                                             "L8 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5)) pos = (0.0, 0.4, 0.0)"))
     @test version_summary(dir) == "moved L8"
     # Further keywords, many ids, own code, lines that do not parse
     save_version(dir)

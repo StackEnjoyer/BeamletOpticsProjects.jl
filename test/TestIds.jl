@@ -20,17 +20,17 @@ catch err
 end
 
 @testset "id_prefix and next_id" begin
-    @test id_prefix(SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5)) == "L"
+    @test id_prefix(SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5))) == "L"
     @test id_prefix(RoundPlanoMirror(0.0254, 0.006)) == "M"
     @test id_prefix(Detector(0.02)) == "D"
     @test id_prefix(RoundThinBeamsplitter(0.0254)) == "BS"
-    @test id_prefix(RightAnglePrism(0.01, 0.01, 1.5)) == "P"
+    @test id_prefix(RightAnglePrism(0.01, 0.01, ConstantRefractiveIndex(1.5))) == "P"
     @test id_prefix(Beam([0.0, 0, 0], [0.0, 1, 0], 1e-6)) == "B"
     @test id_prefix(System()) == "S"
     @test id_prefix(1.0) == "X"
     p = load_project(project_dir("""
-        @component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5)
-        @component L3 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5)
+        @component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5))
+        @component L3 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5))
         @component BS2 = RoundThinBeamsplitter(0.0254)
         """))
     @test next_id(p, "L") === :L4 && next_id(p, "BS") === :BS3 && next_id(p, "B") === :B1
@@ -39,7 +39,7 @@ end
 
 @testset "label and uid" begin
     text = """
-        @component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5) pos = (0.0, 0.1, 0.0) label = "Kollimator" uid = "u-1"
+        @component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5)) pos = (0.0, 0.1, 0.0) label = "Kollimator" uid = "u-1"
         @component M1 = RoundPlanoMirror(0.0254, 0.006)
         @system S1 = [L1, M1] label = "Arm" uid = "u-2"
         """
@@ -61,8 +61,8 @@ end
     @test load_project(dir).entries[2].uid == q.entries[2].uid
     # A copied line with its uid: an error naming the line
     m = message(() -> load_project(project_dir("""
-        @component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5) uid = "u-1"
-        @component L2 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5) uid = "u-1"
+        @component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5)) uid = "u-1"
+        @component L2 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5)) uid = "u-1"
         """)))
     @test occursin("uid \"u-1\" is used twice", m) && occursin("system.jl:2", m)
 end

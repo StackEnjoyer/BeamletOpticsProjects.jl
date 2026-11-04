@@ -84,7 +84,7 @@ The checks and the write are those of [`add!`](@ref): a check that fails throws 
 
 ```julia
 set!(".", :L1; pos = (0.0, 0.12, 0.0), by = "claude")
-set!(".", :L1; code = "SphericalLens(0.05, -0.05, 0.006, 0.0254, 1.5)", label = "Collimator")
+set!(".", :L1; code = "SphericalLens(0.05, -0.05, 0.006, 0.0254, ConstantRefractiveIndex(1.5))", label = "Collimator")
 ```
 """
 function set!(dir::AbstractString, id::Symbol; pos = nothing, rot = nothing, code = nothing,

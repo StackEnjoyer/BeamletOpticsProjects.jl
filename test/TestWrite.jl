@@ -7,9 +7,9 @@ using Test
 
 const P = BeamletOpticsProjects
 
-lens() = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5)
+lens() = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5))
 entry(name, rot; pos = (0.0, 0.0, 0.0)) =
-    Entry(:component, name, :(SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5)), lens(); pos, rot,
+    Entry(:component, name, :(SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5))), lens(); pos, rot,
         pose0 = P.pose_of(lens()))
 line(e) = split(system_code(Project(mktempdir(), "X"; entries = [e])), "\n")[2]
 
@@ -78,7 +78,7 @@ end
     dir = mktempdir()
     new_project(dir; name = "Bench")
     write(joinpath(dir, "system.jl"),
-        "@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5) pos = (0.0, 0.1, 0.0) rot = (NaN, NaN, NaN)\n")
+        "@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5)) pos = (0.0, 0.1, 0.0) rot = (NaN, NaN, NaN)\n")
     e = try
         load_project(dir)
     catch e
@@ -89,10 +89,10 @@ end
 end
 
 @testset "code and meta" begin
-    e = Entry(:component, :L1, "SphericalLens(0.05, -0.05, 0.005, 0.0254, λ -> 1.5)", lens();
+    e = Entry(:component, :L1, "SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5))", lens();
         pos = (0.0, -0.0, 1e-6), pose0 = P.pose_of(lens()),
         meta = [:catalog => ("Spherical lens", ["50", "-50"])])
-    @test line(e) == "@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, (λ->1.5)) " *
+    @test line(e) == "@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5)) " *
                      "pos = (0.0, 0.0, 1.0e-6) catalog = (\"Spherical lens\", [\"50\", \"-50\"])"
     s = SystemEntry(:S1, [:L1], [:B1]; static = true)
     @test split(system_code(Project(mktempdir(), "X"; systems = [s])), "\n")[2] ==

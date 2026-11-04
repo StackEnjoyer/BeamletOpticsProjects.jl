@@ -5,7 +5,7 @@ using Test
 
 const P = BeamletOpticsProjects
 
-const LENS = "SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5)"
+const LENS = "SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5))"
 lens(id, y; uid = lowercase(String(id)), rest = "") = "@component $id = $LENS pos = (0.0, $y, 0.0)$rest uid = \"$uid\""
 beam(id) = "@source $id = Beam([0.0, 0.0, 0.0], [0.0, 1.0, 0.0], 1.0e-6) uid = \"$(lowercase(String(id)))\""
 sys(id, members; rest = "") = "@system $id = [$(join(members, ", "))] sources = [B1]$rest uid = \"$(lowercase(String(id)))\""

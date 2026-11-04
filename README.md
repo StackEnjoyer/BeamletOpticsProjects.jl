@@ -45,7 +45,7 @@ Bench/
 `system.jl` is plain Julia, readable and writable by people and agents:
 
 ```julia
-@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, 1.5) pos = (0.0, 0.1, 0.0) label = "Collimator" uid = "…"
+@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5)) pos = (0.0, 0.1, 0.0) label = "Collimator" uid = "…"
 @component D1 = Detector(0.02) pos = (0.0, 0.3, 0.0) uid = "…"
 @source B1 = Beam([0.0, 0.0, 0.0], [0.0, 1.0, 0.0], 1.0e-6) uid = "…"
 @system S1 = [L1, D1] sources = [B1] uid = "…"

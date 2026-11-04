@@ -4,7 +4,7 @@ using BeamletOptics, BeamletOpticsProjects
 using Test
 
 const SYSTEM = """
-@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, λ -> 1.5) pos = (0.0, 0.1, 0.0) label = "Collimator"
+@component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5)) pos = (0.0, 0.1, 0.0) label = "Collimator"
 @component D1 = Detector(0.05) pos = (0.0, 0.14, 0.0)
 @component G1 = ObjectGroup([RoundPlanoMirror(0.0254, 0.006)]) pos = (0.5, 0.0, 0.0) rot = (0.0, 0.0, 45.0)
 @component M1 = RoundPlanoMirror(0.0254, 0.006) pos = (-0.5, 0.0, 0.0) rot = (0.0, 0.0, 45.0)
@@ -132,8 +132,17 @@ selected_ids = [\"L1\", \"D1\"]
 
     @testset "a system whose trace fails" begin
         q = bench()
+        # a glass of the project without an index at the wavelength of the beam
+        write(joinpath(q.path, "src", "Bench.jl"), """
+            module Bench
+            using BeamletOptics
+            export NoGlass
+            struct NoGlass <: BeamletOptics.AbstractRefractiveIndex end
+            (::NoGlass)(λ) = λ == 1.064e-6 ? error("no glass\\nsecond line") : 1.5
+            end
+            """)
         write(joinpath(q.path, "system.jl"), """
-            @component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, λ -> λ == 1.064e-6 ? error("no glass\\nsecond line") : 1.5) pos = (0.0, 0.1, 0.0)
+            @component L1 = SphericalLens(0.05, -0.05, 0.005, 0.0254, NoGlass()) pos = (0.0, 0.1, 0.0)
             @source B1 = Beam([0.0, 0.0, 0.0], [0.0, 1.0, 0.0], 1.064e-6)
             @system S1 = [L1] sources = [B1]
             @system S2 = [L1]

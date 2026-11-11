@@ -1,0 +1,2 @@
+# The tests and the installed skill read the Markdown files with LF line endings, also on Windows
+*.md text eol=lf

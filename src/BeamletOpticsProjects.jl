@@ -26,7 +26,8 @@ export Project, Entry, SystemEntry, GroupEntry, new_project, load_project, save_
        rotation_matrix, @component, @source, @system, @group, id_prefix, next_id, diff_projects,
        EntryChange, SystemChange, GroupChange, copy_code, save_version, version_summary, versions, trace, look,
        announce, leave, fork_team, teams, post!, board, claim!, release!, claims, wait_for, merge_draft!,
-       evaluate, move!, add!, set!, duplicate!, remove!, members, sources, pose, moved,
+       evaluate, move!, add!, set!, duplicate!, remove!, add_system!, join_system!, leave_system!,
+       members, sources, pose, moved,
        project_versions, check_versions, VersionCheck
 public project_name, module_name, normalize_code, EXTENSION, same_entry, same_system, same_group, new_uid, match_entries,
        install_agent_skill, person, presence_file, session_file, write_presence, read_presences, alive,
@@ -209,5 +210,6 @@ include("Guards.jl")
 include("Move.jl")
 include("Query.jl")
 include("Edit.jl")
+include("Systems.jl")
 
 end

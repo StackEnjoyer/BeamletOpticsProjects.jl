@@ -4,7 +4,9 @@
 
 # BeamletOpticsProjects.jl
 
+[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://stackenjoyer.github.io/BeamletOpticsProjects.jl/dev/)
 [![CI](https://github.com/StackEnjoyer/BeamletOpticsProjects.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/StackEnjoyer/BeamletOpticsProjects.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![codecov](https://codecov.io/gh/StackEnjoyer/BeamletOpticsProjects.jl/graph/badge.svg)](https://codecov.io/gh/StackEnjoyer/BeamletOpticsProjects.jl)
 
 Projects of [BeamletOptics.jl](https://github.com/StackEnjoyer/BeamletOptics.jl): an optical
 setup saved as a folder that people open in

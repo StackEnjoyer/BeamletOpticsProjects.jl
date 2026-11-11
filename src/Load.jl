@@ -75,7 +75,7 @@ end
 
 """
 Throws if the project in the folder `path` has a newer format (`format` of its project file, see
-[`project_marker`](@ref)) than [`FORMAT`](@ref); a missing entry or file is format 1.
+[`project_marker`](@ref)) than `FORMAT`; a missing entry or file is format 1.
 """
 function _check_format(path)
     format = get(_read_marker(path), "format", 1)
@@ -95,7 +95,7 @@ The path of the project file of the project in the folder `dir`: the file `*.bmo
 `<folder name>.bmo` if there is none yet. People and the dialogs of the GUI open a project by it;
 the project is the folder. It is the only file of metadata of the project, a TOML file with
 
-- `format`: the version of the format of `system.jl` (see [`FORMAT`](@ref)), none: 1;
+- `format`: the version of the format of `system.jl` (see `FORMAT`), none: 1;
 - `name`: the module name of the own code `src/<name>.jl` (none: [`module_name`](@ref) of the
   folder);
 - `[versions]`: the newest versions of BeamletOptics, BeamletOpticsProjects and the packages of

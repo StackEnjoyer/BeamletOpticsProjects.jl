@@ -1,0 +1,12 @@
+[deps]
+BeamletOptics = "c387492b-ffec-4e51-9a46-bd230226031c"
+BeamletOpticsProjects = "cd81f88b-d4c6-44ce-ae16-166b70b38414"
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
+
+[sources]
+BeamletOptics = {url = "https://github.com/StackEnjoyer/BeamletOptics.jl", rev = "master"}
+BeamletOpticsProjects = {path = ".."}
+
+[compat]
+BeamletOptics = "0.14"
+Documenter = "1.11"

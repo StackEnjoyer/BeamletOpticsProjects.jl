@@ -1,0 +1,41 @@
+name: Documentation
+on:
+  push:
+    branches:
+      - main
+    tags: ['*']
+  pull_request:
+  workflow_dispatch:
+concurrency:
+  # Skip intermediate builds: always.
+  # Cancel intermediate builds: only if it is a pull request build.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ startsWith(github.ref, 'refs/pull/') }}
+jobs:
+  docs:
+    name: Build and deploy the documentation
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      actions: write # julia-actions/cache deletes its old caches
+      contents: write # deploydocs pushes to the gh-pages branch
+      statuses: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: julia-actions/setup-julia@v3
+        with:
+          version: '1'
+      - uses: julia-actions/cache@v3
+      # The docs of a tag describe the release, which users install with the registered BeamletOptics
+      - name: Use the registered BeamletOptics
+        if: startsWith(github.ref, 'refs/tags/')
+        run: sed -i '/^BeamletOptics = {url = /d' Project.toml test/Project.toml docs/Project.toml
+      - name: Instantiate the docs environment
+        shell: julia --project=docs --color=yes {0}
+        run: |
+          using Pkg
+          Pkg.instantiate()
+      - name: Build and deploy
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: julia --project=docs --color=yes docs/make.jl

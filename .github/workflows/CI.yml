@@ -29,6 +29,10 @@ jobs:
           - windows-latest
         arch:
           - x64
+        include:
+          - version: '1'
+            os: ubuntu-latest
+            coverage: --code-coverage=@${{ github.workspace }}
     steps:
       - uses: actions/checkout@v7
       - uses: julia-actions/setup-julia@v3
@@ -42,4 +46,12 @@ jobs:
           using Pkg
           Pkg.instantiate()
       - name: Run tests
-        run: julia --project=test --color=yes test/runtests.jl
+        run: julia --project=test --color=yes ${{ matrix.coverage }} test/runtests.jl
+      - uses: julia-actions/julia-processcoverage@v1
+        if: matrix.coverage
+      - uses: codecov/codecov-action@v7
+        if: matrix.coverage
+        with:
+          files: lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false

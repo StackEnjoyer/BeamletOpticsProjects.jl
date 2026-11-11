@@ -1,4 +1,5 @@
 [deps]
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
 BeamletOptics = "c387492b-ffec-4e51-9a46-bd230226031c"
 BeamletOpticsProjects = "cd81f88b-d4c6-44ce-ae16-166b70b38414"
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
@@ -12,5 +13,6 @@ BeamletOptics = {url = "https://github.com/StackEnjoyer/BeamletOptics.jl", rev =
 BeamletOpticsProjects = {path = ".."}
 
 [compat]
+Aqua = "0.8"
 BeamletOptics = "0.14"
 Test = "1"

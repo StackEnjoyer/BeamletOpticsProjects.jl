@@ -4,7 +4,7 @@ version = "0.1.0"
 authors = ["Hugo Uittenbosch <hugo.uittenbosch@dlr.de>"]
 
 [workspace]
-projects = ["test"]
+projects = ["test", "docs"]
 
 [deps]
 BeamletOptics = "c387492b-ffec-4e51-9a46-bd230226031c"

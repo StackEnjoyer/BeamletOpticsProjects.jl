@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="404" height="304" viewBox="0 0 404 304" role="img" aria-labelledby="title desc">
+  <title id="title">BeamletOpticsProjects.jl</title>
+  <desc id="desc">The BeamletOptics beamlet in a project folder with two sheets in it; its tab carries the Julia dots.</desc>
+  <!-- Julia colors: red #CB3C33, green #389826, purple #9558B2, blue #4063D8.
+       No black or white, so one file serves both light and dark themes. -->
+  <!-- two sheets in the folder, behind its front edge: the back one only where the front one
+       does not cover it -->
+  <g fill="none" stroke="#4063D8" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 222 18 V 14 Q 222 6 230 6 H 354 Q 362 6 362 14 V 52"/>
+    <path d="M 200 52 V 26 Q 200 18 208 18 H 332 Q 340 18 340 26 V 52"/>
+  </g>
+  <!-- the folder, with its tab; the buttons of the GUI logo are the Julia dots on the tab -->
+  <path d="M 42 24 H 136 Q 146 24 152 32 L 162 46 Q 166 52 176 52 H 362 Q 380 52 380 70 V 262 Q 380 280 362 280 H 42 Q 24 280 24 262 V 42 Q 24 24 42 24 Z" fill="none" stroke="#4063D8" stroke-width="8" stroke-linejoin="round"/>
+  <circle cx="54" cy="38" r="8" fill="#CB3C33"/>
+  <circle cx="78" cy="38" r="8" fill="#389826"/>
+  <circle cx="102" cy="38" r="8" fill="#9558B2"/>
+  <!-- rays of the BeamletOptics logo (docs/src/assets/logo.svg of BeamletOptics.jl), unchanged
+       and scaled uniformly by 5.6 about its waist (130, 88), as in the logo of BeamletOpticsGUI -->
+  <g fill="none" stroke-width="0.705556" transform="translate(202 168) scale(5.6) translate(-130 -88)">
+    <path d="M 105 75 C 105 75 123.73704 84 130 84 C 136.26296 84 155 75 155 75" stroke="#CB3C33"/>
+    <path d="M 105 101 C 105 101 123.73704 92 130 92 C 136.26296 92 155 101 155 101" stroke="#CB3C33"/>
+    <path d="M 105 84.706114 H 155" stroke="#389826"/>
+    <path d="M 105 91.297564 H 155" stroke="#389826"/>
+    <path d="M 105 87.999998 H 155" stroke="#4063D8"/>
+    <path d="M 104.69325 75.636408 L 155.30253 100.37212" stroke="#9558B2"/>
+    <path d="M 104.69325 100.37036 L 155.31221 75.635438" stroke="#9558B2"/>
+  </g>
+</svg>

@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/StackEnjoyer/BeamletOpticsProjects.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/StackEnjoyer/BeamletOpticsProjects.jl/actions/workflows/CI.yml?query=branch%3Amain)
 
-Projects of [BeamletOptics.jl](https://github.com/JuliaPhysics/BeamletOptics.jl): an optical
+Projects of [BeamletOptics.jl](https://github.com/StackEnjoyer/BeamletOptics.jl): an optical
 setup saved as a folder that people open in
 [BeamletOpticsGUI.jl](https://github.com/StackEnjoyer/BeamletOpticsGUI.jl) and that coding agents
 edit at the same time. A project is data, no Julia environment: it opens from any environment that

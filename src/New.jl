@@ -124,7 +124,7 @@ _module_template(name) = """
 _agents_template(name, marker) = """
     # Project $name (BeamletOptics)
 
-    An optical setup of [BeamletOptics](https://github.com/JuliaPhysics/BeamletOptics.jl) as a
+    An optical setup of [BeamletOptics](https://github.com/StackEnjoyer/BeamletOptics.jl) as a
     project of BeamletOpticsProjects. People change it in the GUI (BeamletOpticsGUI), agents in the
     code, at the same time.
 

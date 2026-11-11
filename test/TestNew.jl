@@ -60,12 +60,19 @@ end
     @test !occursin("## The open windows", agents)
     @test occursin("src/Example.jl", agents)
     # how to get the skills from the packages
-    for m in ("BeamletOptics", "BeamletOpticsProjects", "BeamletOpticsGUI")
+    for m in ("BeamletOptics", "BeamletOpticsProjects")
         @test occursin("$m.install_agent_skill()", agents)
     end
-    # in the environment of the person, never one in the folder
+    # the agent works without the GUI (BeamletOpticsProjects#3)
+    @test !occursin("BeamletOpticsGUI.install_agent_skill()", agents)
+    # in an environment of the agent's own, never one in the folder, changed only after asking
     env = match(r"## Environment\n(.*?)(\n## |\z)"s, agents).captures[1]
-    @test occursin("environment of the person you work for", env)
+    @test occursin("environment of your own, without the GUI", env)
+    @test occursin("@bmo-agent", env) && occursin("check_versions", env)
+    @test occursin("Never guess a path", env) && occursin("only after the person agreed", env)
+    @test !occursin("environment of the person", agents)
+    # the own code of the project has no hint at code for the GUI
+    @test !occursin("card_rows", read(joinpath(dir, "src", "Example.jl"), String))
     @test occursin("`[packages]` of `$(basename(dir)).bmo`", env)
     @test occursin("Never make this folder", env)
     @test !occursin("Project.toml", agents) && !occursin(".envs", agents)

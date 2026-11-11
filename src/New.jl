@@ -114,8 +114,9 @@ end
 _module_template(name) = """
     module $name
 
-    # Own code of the project: functions that build components or groups, own component types,
-    # their `card_rows` for the GUI, ... Everything exported here can be used in `system.jl`.
+    # Own code of the project: functions that build components or groups, own component types.
+    # Everything exported here can be used in `system.jl`. Agents load it without the GUI: it
+    # uses BeamletOptics and the packages under `[packages]` of the project file, never the GUI.
     using BeamletOptics
 
     end
@@ -135,14 +136,16 @@ _agents_template(name, marker) = """
     `beamletoptics`, the window in `beamletopticsgui`. They come from the installed packages and lie
     in `.claude/skills/` (not part of the versions). Read them before you change the project. If
     one is missing or the packages were updated, install them again from the packages, in this
-    folder and in the environment of the person (see "Environment"):
+    folder and with your environment (see "Environment"):
 
     ```julia
     using BeamletOptics, BeamletOpticsProjects
     BeamletOptics.install_agent_skill()
     BeamletOpticsProjects.install_agent_skill()
-    using BeamletOpticsGUI; BeamletOpticsGUI.install_agent_skill()   # if the GUI is installed
     ```
+
+    The skill `beamletopticsgui` comes with the GUI, which your environment does not have: the
+    windows of the people install it.
 
     ## Report on the tools
 
@@ -163,9 +166,24 @@ _agents_template(name, marker) = """
 
     ## Environment
 
-    Run Julia in the environment of the person you work for (ask them); it has BeamletOptics,
-    BeamletOpticsProjects and the packages under `[packages]` of `$marker`. Never make this folder
-    a Julia environment (no `--project=.`, no `Pkg.activate(".")`, no file of Pkg in it).
+    Run Julia in an environment of your own, without the GUI: it has BeamletOptics,
+    BeamletOpticsProjects and the packages under `[packages]` of `$marker`. The shared environment
+    of agents is `@bmo-agent` (`julia --project=@bmo-agent`).
+
+    - Before you change the project, check the environment against the project file:
+      `check_versions(".")`. Tell the person about `:older` and `:missing`.
+    - If `@bmo-agent` does not exist, ask the person whether to create it or which environment to
+      use instead. Never guess a path.
+    - Create or change an environment (`Pkg.add`, `Pkg.update`) only after the person agreed, and
+      say that it compiles the packages again and changes everything else that uses it.
+    - Never make this folder a Julia environment (no `--project=.`, no `Pkg.activate(".")`, no file
+      of Pkg in it).
+
+    ```julia
+    # julia --project=@bmo-agent, once, after the person agreed
+    using Pkg
+    Pkg.add(["BeamletOptics", "BeamletOpticsProjects"])   # and the packages under [packages]
+    ```
 
     ## Check
 

@@ -12,27 +12,34 @@ BeamletOpticsProjects reads, writes, traces and versions it, also without a wind
 
 When this Skill is active:
 
-- **Run Julia in the environment of the person you work for (ask them which one).** A project is
-  data, no Julia environment: it opens from any environment that has BeamletOptics,
-  BeamletOpticsProjects and the packages under `[packages]` of its project file `<folder>.bmo`.
-  Never make the project folder a Julia environment (no `--project=.`, no `Pkg.activate(".")`).
-  `check_versions(".")` compares the versions that the project file records with those of the
-  environment (`look(p)` shows them too): tell the person about `:older` (`] up X`) and
-  `:missing` (`] add X`) instead of changing their environment.
+- **Run Julia in an environment of your own, without the GUI.** A project is data, no Julia
+  environment: it opens from any environment that has BeamletOptics, BeamletOpticsProjects and the
+  packages under `[packages]` of its project file `<folder>.bmo`. Agents use the shared environment
+  `@bmo-agent` (`julia --project=@bmo-agent`); BeamletOpticsGUI and Makie are for the windows of
+  the people. Never make the project folder a Julia environment (no `--project=.`, no
+  `Pkg.activate(".")`).
+  - **Check before you change the project:** `check_versions(".")` compares the versions that the
+    project file records with those of the environment (`look(p)` shows them too). Tell the person
+    about `:older` (`Pkg.update("X")`) and `:missing` (`Pkg.add("X")`).
+  - **No environment yet:** if `@bmo-agent` does not exist, ask the person whether to create it
+    (`julia --project=@bmo-agent -e 'using Pkg; Pkg.add(["BeamletOptics", "BeamletOpticsProjects"])'`,
+    plus the packages under `[packages]`) or which environment to use instead. Never guess a path.
+  - **Change an environment only after the person agreed:** adding or updating packages compiles
+    them again and changes everything else that uses the environment; say so when you ask.
 - **The optics comes from the `beamletoptics` skill** (units, +y optical axis, constructors,
-  `solve_system!`, detectors), the window from the `beamletopticsgui` skill. Install the missing
-  ones from the packages, in the project folder and with the environment of the person (so that
-  the installed versions are described): `using BeamletOptics; BeamletOptics.install_agent_skill()`,
-  `using BeamletOpticsProjects; BeamletOpticsProjects.install_agent_skill()`,
-  `using BeamletOpticsGUI; BeamletOpticsGUI.install_agent_skill()`. They come from the installed
-  packages, never from a copy in the versions of the project.
+  `solve_system!`, detectors). Install the missing skills from the packages, in the project folder
+  and with your environment (so that the installed versions are described):
+  `using BeamletOptics; BeamletOptics.install_agent_skill()`,
+  `using BeamletOpticsProjects; BeamletOpticsProjects.install_agent_skill()`. They come from the
+  installed packages, never from a copy in the versions of the project. The skill
+  `beamletopticsgui` (the window) comes with the GUI; the windows of the people install it.
 - This skill describes BeamletOpticsProjects **0.1** (`beamletopticsprojects-version` above). Check
   the installed version with `julia --project=<environment> -e 'using BeamletOpticsProjects; println(pkgversion(BeamletOpticsProjects))'`.
   If its major or minor version differs, confirm every function with its docstring
   (`using REPL; display(@doc trace)`: without `REPL` a script prints the raw `DocStr`) and install
   the matching skill as above.
 - Use only documented API (`API.md`). **Do not invent functions or keywords.**
-- Run Julia in the environment of the person after any change: `load_project` must load, and `trace`/`look` show what the change did. Do not claim a
+- Run Julia in your environment after any change: `load_project` must load, and `trace`/`look` show what the change did. Do not claim a
   change works when you did not run it. Loading the packages takes about 15 s per `julia` call:
   put loading, tracing, changing and tracing again into one script instead of many small calls.
 - People and agents are participants alike: announce yourself before you change the project, claim

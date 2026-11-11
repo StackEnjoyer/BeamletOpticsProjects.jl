@@ -61,6 +61,17 @@ pose
 moved
 ```
 
+## Own types
+
+A type of the project's own code (`src/<Name>.jl`) tells its constructor, so that the window can
+save changes of its shape to its line. `src/gui.jl` holds the project's code for the window (e.g.
+`card_rows` of its own types): only the GUI includes it, [`load_project`](@ref) never does, and
+its packages are not the project's `[packages]`.
+
+```@docs
+constructor_code
+```
+
 ## Versions of the packages
 
 ```@docs

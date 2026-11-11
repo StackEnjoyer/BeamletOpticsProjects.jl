@@ -61,6 +61,7 @@ Bench/
 │                    with ([versions]) and the packages that src/ uses ([packages]). Do not edit it.
 ├── system.jl        the setup: one line per component, source, group and system (FORMAT.md)
 ├── src/Bench.jl     own code (module Bench): functions that build components, own types. The GUI never writes it.
+├── src/gui.jl       optional: the window's part (card_rows of own types). Only the GUI loads it (see "Own code").
 ├── view.toml        the view of the GUI (camera, colors, clip planes). Do not edit it.
 ├── AGENTS.md        what is specific to this project (CLAUDE.md points to it)
 ├── .claude/skills/  the skills, installed from the packages (not versioned)
@@ -119,6 +120,47 @@ Bench/
    this system's sources, while the window superposes the hits of all systems that share it.
 6) `release!` your claims and `leave` when you are done. Versions are the person's (see
    "Versions").
+
+## Own code
+
+`src/<Name>.jl` holds the module `<Name>` of the project: functions that build components or
+groups and own types. Its exported names can be used in `system.jl`. It uses BeamletOptics and the
+packages under `[packages]`, never the GUI.
+
+- **An own type tells its constructor** with a method of `constructor_code`, the code of the
+  right-hand side of its line without the pose. The window builds the line from it when a person
+  changes the shape of such an object on its card (e.g. a slider of a width); without a method such
+  a change lives only in the window and is not saved. The string must parse and build the object as
+  it is now, in the module of the project; `import ..BeamletOpticsProjects` reaches the package
+  from the module in any environment:
+
+  ```julia
+  module Bench
+  using BeamletOptics
+  import ..BeamletOpticsProjects
+  export Block
+
+  struct Block{T} <: BeamletOptics.AbstractObject{T}
+      shape::BeamletOptics.PlanoSurfaceSDF{T}
+      width::T
+      thickness::T
+  end
+  Block(width, thickness) = Block(BeamletOptics.PlanoSurfaceSDF(thickness, width), width, thickness)
+  BeamletOptics.interact3d(::BeamletOptics.AbstractSystem, ::Block, ::Beam, ::Ray) = nothing   # absorbs
+
+  BeamletOpticsProjects.constructor_code(b::Block) = "Block($(b.width), $(b.thickness))"
+  end
+  ```
+
+  `constructor_code(obj)` is `nothing` for every type without a method (the components of
+  BeamletOptics too: their lines are written from their code). After `load_project` in the same
+  script, call it as `Base.invokelatest(constructor_code, p[:K1])`: the method is newer than the
+  script.
+- **`src/gui.jl` is the window's part** (optional): `card_rows` and other code of BeamletOpticsGUI
+  for the own types (the skill `beamletopticsgui`). Only the window includes it, into the module
+  of the project after the rest. `load_project` and `trace` never include it, so you neither load
+  nor need it, and its packages (the GUI, Makie) are not under `[packages]`. Write it only when the
+  person asks for a card of an own type; it changes the project like any file of `src/`.
 
 ## The open windows
 

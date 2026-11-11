@@ -478,11 +478,20 @@ end
 const _NOT_PACKAGES = ("Base", "Core", "Main")
 
 """
+The file of `src/` that holds the project's code for the window (e.g. `card_rows` of its own
+types): the GUI includes it into the module of the project after the rest, [`load_project`](@ref)
+never does, and the packages it uses (the GUI, Makie) are not the project's `[packages]`. It counts
+for [`project_stamp`](@ref) like any file of `src/`.
+"""
+const _GUI_FILE = "gui.jl"
+
+"""
 The names of the packages that the own code of the project in the folder `dir` uses: the first name
 of every `using` and `import` in the `.jl` files of `src/` (without files and folders whose name
-starts with `.`, as for [`project_stamp`](@ref)), without relative ones (`using .X`), `Base`,
-`Core`, `Main`, BeamletOptics, BeamletOpticsProjects and the names `own` (the project's own
-module). A file that does not parse is skipped.
+starts with `.`, as for [`project_stamp`](@ref), and without `src/gui.jl`, the window's part, see
+`_GUI_FILE`), without relative ones (`using .X`), `Base`, `Core`, `Main`, BeamletOptics,
+BeamletOpticsProjects and the names `own` (the project's own module). A file that does not parse is
+skipped.
 """
 function _used_packages(dir, own)
     names = Set{String}()
@@ -492,6 +501,7 @@ function _used_packages(dir, own)
         filter!(d -> !startswith(d, '.'), dirs)
         for f in files
             (startswith(f, '.') || !endswith(f, ".jl")) && continue
+            (root == src && f == _GUI_FILE) && continue
             ex = try
                 Meta.parseall(read(joinpath(root, f), String); filename = f)
             catch e

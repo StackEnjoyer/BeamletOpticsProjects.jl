@@ -302,6 +302,47 @@ end
     @test err isa ArgumentError
 end
 
+@testset "a ref that the file system refuses for a moment" begin
+    P = BeamletOpticsProjects
+    refused = LibGit2.GitError(LibGit2.Error.OS, LibGit2.Error.ERROR,
+        "failed to rename lockfile to 'refs/heads/main': Access denied")
+    # refused twice, then written
+    calls = 0
+    @test P._retry_refused(; wait = 0.01) do
+        calls += 1
+        calls <= 2 && throw(refused)
+        return :written
+    end === :written
+    @test calls == 3
+    # refused for good: the last error after the tries
+    calls = 0
+    err = try
+        P._retry_refused(() -> (calls += 1; throw(refused)); tries = 3, wait = 0.01)
+    catch e
+        e
+    end
+    @test err === refused && calls == 3
+    # another error at once
+    calls = 0
+    @test_throws ArgumentError P._retry_refused(() -> (calls += 1; throw(ArgumentError("x"))); wait = 0.01)
+    @test calls == 1
+    # the lock of the ref of another save, released meanwhile: the version is saved on the head
+    dir = joinpath(mktempdir(), "Ref")
+    new_project(dir)
+    before = length(versions(dir))
+    ref = LibGit2.with(LibGit2.GitRepo(dir)) do repo
+        LibGit2.with(r -> LibGit2.name(r), LibGit2.head(repo))
+    end
+    lock = joinpath(dir, ".git", ref * ".lock")
+    write(lock, "")
+    write(joinpath(dir, "src", "Extra.jl"), "f() = 1\n")
+    t = @async (sleep(0.3); rm(lock))
+    @test save_version(dir; message = "after the lock") isa String
+    wait(t)
+    @test length(versions(dir)) == before + 1
+    @test first(versions(dir)).message == "after the lock"
+end
+
 @testset "a project in a worktree or submodule" begin
     # The git directory lies apart from the working directory, as in a worktree or submodule
     root = mktempdir()

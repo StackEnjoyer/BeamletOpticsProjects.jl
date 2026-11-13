@@ -73,6 +73,12 @@ end
     @test !occursin("environment of the person", agents)
     # the own code of the project has no hint at code for the GUI
     @test !occursin("card_rows", read(joinpath(dir, "src", "Example.jl"), String))
+    # that is src/gui.jl, the window's part, which agents do not load; own types tell their
+    # constructor for the saves of the window
+    files = match(r"## Files\n(.*?)(\n## |\z)"s, agents).captures[1]
+    @test occursin("`src/gui.jl`", files) && occursin("card_rows", files)
+    @test occursin("agents neither load nor need it", files)
+    @test occursin("constructor_code", files)
     @test occursin("`[packages]` of `$(basename(dir)).bmo`", env)
     @test occursin("Never make this folder", env)
     @test !occursin("Project.toml", agents) && !occursin(".envs", agents)

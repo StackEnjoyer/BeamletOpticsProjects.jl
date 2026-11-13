@@ -28,7 +28,7 @@ export Project, Entry, SystemEntry, GroupEntry, new_project, load_project, save_
        announce, leave, fork_team, teams, post!, board, claim!, release!, claims, wait_for, merge_draft!,
        evaluate, move!, add!, set!, duplicate!, remove!, add_system!, join_system!, leave_system!,
        members, sources, pose, moved,
-       project_versions, check_versions, VersionCheck
+       project_versions, check_versions, VersionCheck, constructor_code
 public project_name, module_name, normalize_code, EXTENSION, same_entry, same_system, same_group, new_uid, match_entries,
        install_agent_skill, person, presence_file, session_file, write_presence, read_presences, alive,
        merge_plan, compose
@@ -211,5 +211,6 @@ include("Move.jl")
 include("Query.jl")
 include("Edit.jl")
 include("Systems.jl")
+include("Code.jl")
 
 end

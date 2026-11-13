@@ -18,6 +18,8 @@ One line per entry; components first, then sources, then groups, then systems:
   copy it; a new line has no `uid`, it gets one when the project is saved.
 - The right-hand side is any expression that builds a BeamletOptics component, group or source, also
   a call of a function of `src/<Name>.jl` (its exported names). SI units: m, wavelengths in m.
+  For an own type with a method of `constructor_code`, the window writes this expression anew
+  from that method when a person changes the shape on its card (see "Own code" in `SKILL.md`).
 - `pos` is the absolute position (m), `rot` the rotation since construction in degrees: first about
   the global x-axis, then y, then z. Both are optional.
 - `catalog = (...)` belongs to the GUI (its page "Edit"); delete it when you change the constructor.

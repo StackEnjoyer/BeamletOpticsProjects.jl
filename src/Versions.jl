@@ -60,10 +60,33 @@ function save_version(dir::AbstractString; message::Union{Nothing, AbstractStrin
         end
         isempty(strip(msg)) && (msg = "Changed " * join(_changed_files(repo, head, rel), ", "))
         sig = _signature(repo)
-        id = LibGit2.commit(repo, msg; author = sig, committer = sig, tree_id = tree)
+        # The parent is the head at each try, also when a version of another person came first
+        id = _retry_refused() do
+            LibGit2.commit(repo, msg; author = sig, committer = sig, tree_id = tree)
+        end
         return string(id)
     finally
         close(repo)
+    end
+end
+
+"""
+Runs `f()`, a write to a repository, again while the file system refuses a file of it for a moment
+or another save holds its lock: on a shared drive the rename of `refs/heads/<branch>.lock` to the
+ref is refused while another computer reads the ref, and libgit2 then reports an error of the
+operating system ("access denied"). Tries up to `tries` times `wait` seconds apart, then throws the
+last error. Other errors are thrown at once.
+"""
+function _retry_refused(f; tries::Int = 40, wait::Real = 0.05)
+    for attempt in 1:tries
+        try
+            return f()
+        catch e
+            refused = e isa LibGit2.GitError &&
+                (e.class == LibGit2.Error.OS || occursin("lock", lowercase(e.msg)))
+            (refused && attempt < tries) || rethrow()
+        end
+        sleep(wait)
     end
 end
 

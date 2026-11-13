@@ -100,6 +100,12 @@ Bench/
    - `new = duplicate!(".", [:M19, :L1]; rot = (0, 0, -90), pivot = :M19, offset, systems = :same,
      by)` copies lines (a group with its members) by the same rigid motion and returns the new ids.
    - `remove!(".", [:M20]; by)` removes lines with their places in systems and groups.
+   - `s = add_system!(".", [:L1, :D1]; sources = [:B1], label, by)` makes a `@system` line of
+     components, groups and sources (the next free `S<n>`, also the first one of an empty project);
+     `join_system!(".", :S1, [:M2, :B2]; by)` puts lines into a system and
+     `leave_system!(".", :S1, [:M2]; by)` takes them out (they stay lines of the project). A source
+     is in at most one system: one that joins leaves its old system in the same write; components
+     and groups can be members of several systems.
    Read with `members(p, :S1)`, `sources(p, :S1)` and `pose(p, :TM2)` (`pos`, `rot` as a matrix,
    as the line has it: `set!(".", :TM2; pos, rot)` puts a remembered pose back). Code in
    `src/<Name>.jl` and anything these do not cover (form: `FORMAT.md`) is edited as text: then
@@ -119,6 +125,18 @@ Bench/
    this system's sources, while the window superposes the hits of all systems that share it.
 6) `release!` your claims and `leave` when you are done. Versions are the person's (see
    "Versions").
+
+From an empty project to a traced system, without writing `system.jl` as text:
+
+```julia
+using BeamletOptics, BeamletOpticsProjects
+b = add!(".", "Beam([0.0, 0.0, 0.0], [0.0, 1.0, 0.0], 1.064e-6)"; by = "claude")   # :B1
+l = add!(".", "SphericalLens(0.05, -0.05, 0.005, 0.0254, ConstantRefractiveIndex(1.5))";
+         pos = (0.0, 0.1, 0.0), by = "claude")                                       # :L1
+d = add!(".", "Detector(0.02)"; pos = (0.0, 0.2, 0.0), by = "claude")                # :D1
+s = add_system!(".", [l, d]; sources = [b], by = "claude")                           # :S1
+trace(load_project("."), s).detectors
+```
 
 ## The open windows
 

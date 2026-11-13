@@ -50,6 +50,9 @@ set!
 move!
 duplicate!
 remove!
+add_system!
+join_system!
+leave_system!
 ```
 
 ## Read lines

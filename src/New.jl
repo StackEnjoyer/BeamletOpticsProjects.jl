@@ -158,7 +158,12 @@ _agents_template(name, marker) = """
 
     - `system.jl`: the setup, one line per component, source and system.
     - `src/$name.jl`: own code (module `$name`): functions that build components or groups, own
-      types. Its exported names can be used in `system.jl`. The GUI never writes it.
+      types. Its exported names can be used in `system.jl`. The GUI never writes it. An own type
+      tells its constructor with a method of `BeamletOpticsProjects.constructor_code`, so that the
+      window can save changes of its shape (e.g. on its card) to its line.
+    - `src/gui.jl` (optional): the code for the window (`card_rows` etc. of the own types). Only
+      the GUI includes it, into the module of the project; agents neither load nor need it, and
+      `load_project` and `trace` work without it. Its packages are not under `[packages]`.
     - `$marker`: the project file that people open. It records the module name, the newest
       versions the project was saved with (`[versions]`) and the packages that `src/` uses
       (`[packages]`); the saves write it, do not edit it.

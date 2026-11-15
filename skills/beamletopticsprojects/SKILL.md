@@ -95,7 +95,10 @@ Bench/
      label = "fold", systems = [:S1], by = "claude")`: picks the next free id of its prefix in the
      same write (no other participant can take it meanwhile) and returns it; a source goes into
      the `sources` of one system. `pos` is in m, `rot` in degrees (not radians as in
-     BeamletOptics); the prefixes of the ids are listed in `FORMAT.md`.
+     BeamletOptics); the prefixes of the ids are listed in `FORMAT.md`. `pos` places the object
+     exactly, also a beam whose code has a start of its own; without `pos` it stays where its code
+     builds it, e.g. `add!(".", "Beam([0.0, -0.05, 0.0], [0.0, 1.0, 0.0], 1.064e-6)")` starts at
+     y = −0.05 m.
    - `set!(".", :L9; pos, rot, code, label, by)` changes only the given fields of a line (a group:
      its label; move groups with `move!`).
    - `move!(".", [:G1, :FIOS1]; offset = (0.3, 0, 0), rot = (0, 0, 10), pivot = :center, by)` moves

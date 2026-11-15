@@ -187,7 +187,10 @@ _agents_template(name, marker) = """
     ```julia
     # julia --project=@bmo-agent, once, after the person agreed
     using Pkg
-    Pkg.add(["BeamletOptics", "BeamletOpticsProjects"])   # and the packages under [packages]
+    # BeamletOpticsProjects is not in the General registry yet: both from their repositories
+    Pkg.add([PackageSpec(url = "https://github.com/StackEnjoyer/BeamletOptics.jl", rev = "master"),
+        PackageSpec(url = "https://github.com/StackEnjoyer/BeamletOpticsProjects.jl", rev = "main")])
+    # and the packages under [packages]
     ```
 
     ## Check

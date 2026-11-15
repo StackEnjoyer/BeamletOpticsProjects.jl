@@ -3,7 +3,7 @@ Adding, changing, copying and removing lines of system.jl with checks, in one wr
 =#
 
 """
-    add!(dir, code::AbstractString; id = nothing, pos = (0, 0, 0), rot = (0, 0, 0), label = nothing,
+    add!(dir, code::AbstractString; id = nothing, pos = nothing, rot = (0, 0, 0), label = nothing,
          systems = Symbol[], by = nothing) -> Symbol
 
 Adds a line for the object built by `code` (a constructor, e.g. `"RoundPlanoMirror(0.0254, 0.006)"`)
@@ -14,7 +14,9 @@ is a beam or a beam group, else a `@component`.
 [`id_prefix`](@ref)), chosen in the same load and write, so no other participant can take it in
 between; a given `id` that is taken throws. `pos` (in m) and `rot` (angles in degrees or a 3×3
 matrix, see [`rotation_matrix`](@ref)) are the pose of the line, `label` the name shown instead of
-the id. The new line becomes a member of the `systems` (ids of systems); a source goes into the
+the id. `pos` places the object exactly, also one whose code has a position of its own (e.g. the
+start of a beam); without `pos` the object stays where its code builds it, and the line has no
+`pos`. The new line becomes a member of the `systems` (ids of systems); a source goes into the
 `sources` of at most one system.
 
 The changed project is checked before anything is written: the code builds in the module of the
@@ -36,7 +38,7 @@ add!(".", "Beam([0.0, 0.0, 0.0], [0.0, 1.0, 0.0], 1.064e-6)"; systems = [:S1])  
 add!(dir::AbstractString, code::AbstractString; kwargs...) =
     _retry_changed(() -> _add_once!(dir, code; kwargs...))
 
-function _add_once!(dir::AbstractString, code::AbstractString; id = nothing, pos = (0, 0, 0),
+function _add_once!(dir::AbstractString, code::AbstractString; id = nothing, pos = nothing,
         rot = (0, 0, 0), label = nothing, systems = Symbol[], by = nothing)
     p = load_project(dir)
     what = isnothing(id) ? "the new line" : "`$id`"

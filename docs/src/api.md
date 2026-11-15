@@ -96,6 +96,8 @@ look
 save_version
 versions
 version_summary
+changes
+changes_file
 diff_projects
 EntryChange
 SystemChange

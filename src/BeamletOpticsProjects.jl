@@ -12,7 +12,7 @@ See [`load_project`](@ref), [`save_project`](@ref), [`new_project`](@ref) and th
 module BeamletOpticsProjects
 
 using BeamletOptics
-using Dates: DateTime, unix2datetime
+using Dates: DateTime, Second, unix2datetime
 using LibGit2
 using LinearAlgebra
 using SHA
@@ -27,7 +27,7 @@ export Project, Entry, SystemEntry, GroupEntry, new_project, load_project, save_
        EntryChange, SystemChange, GroupChange, copy_code, save_version, version_summary, versions, trace, look,
        announce, leave, fork_team, teams, post!, board, claim!, release!, claims, wait_for, merge_draft!,
        evaluate, move!, add!, set!, duplicate!, remove!, add_system!, join_system!, leave_system!,
-       members, sources, pose, moved,
+       members, sources, pose, moved, changes, changes_file,
        project_versions, check_versions, VersionCheck, constructor_code
 public project_name, module_name, normalize_code, EXTENSION, same_entry, same_system, same_group, new_uid, match_entries,
        install_agent_skill, person, presence_file, session_file, write_presence, read_presences, alive,
@@ -203,6 +203,7 @@ include("AgentSkill.jl")
 include("Trace.jl")
 include("Look.jl")
 include("Participants.jl")
+include("Changes.jl")
 include("Merge.jl")
 include("Teams.jl")
 include("Claims.jl")

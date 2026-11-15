@@ -64,6 +64,15 @@ the project shows every `.bmo/session*.md` to Claude Code).
 """
 session_file(dir::AbstractString, id::AbstractString) = joinpath(dir, ".bmo", "session-$id.md")
 
+"""
+    changes_file(dir, id) -> String
+
+The log `.bmo/changes-<id>.toml` of the changes of the person `id` in the project folder `dir`,
+which its window writes (all changes since it opened the project, with old and new poses). Read
+the logs with [`changes`](@ref).
+"""
+changes_file(dir::AbstractString, id::AbstractString) = joinpath(dir, ".bmo", "changes-$id.toml")
+
 # The id of the participant of a presence file name, `nothing` for other files
 function _presence_id(name::AbstractString)
     m = match(r"^presence-(.+)\.toml$", name)

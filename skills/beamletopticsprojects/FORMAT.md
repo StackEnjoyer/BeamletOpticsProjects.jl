@@ -40,7 +40,8 @@ One line per entry; components first, then sources, then groups, then systems:
   from that method when a person changes the shape on its card (see "Own code" in `SKILL.md`).
 - `pos` is the absolute position (m), `rot` the rotation since construction in **degrees** (unlike
   BeamletOptics, whose rotations take radians): first about the global x-axis, then y, then z. Both
-  are optional.
+  are optional. `pos` moves the object there from wherever its code builds it, also a source with a
+  start in its code; a line without `pos` keeps the position of its code.
 - `catalog = (...)` belongs to the GUI (its page "Edit"); delete it when you change the constructor.
 - `@system`: members are components; a component may be in several systems, a source in at most one.
   `static = true` makes a `StaticSystem`. Each system is traced on its own (`trace(p, :S1)`); a detector that is in several systems is the exception in the window, which adds up their hits.

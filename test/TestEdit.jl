@@ -94,10 +94,11 @@ end
         @test maximum(abs, BMO.position(p[:M3]) - [0.1, 0.4, 0.0]) ≤ 1e-15
         @test occursin("@component M3 = RoundPlanoMirror(0.0254, 0.006) pos = (0.1, 0.4, 0.0) rot = (0.0, 0.0, 45.0) uid",
             String(text(dir)))
-        # zero angles are no rotation
+        # zero angles are no rotation; without `pos` the line has none, the object stays as built
         @test P.add!(dir, "Detector(0.01)"; label = "Camera") === :D2
         p = load_project(dir)
-        @test entry(p, :D2).rot === nothing && entry(p, :D2).pos == (0.0, 0.0, 0.0)
+        @test entry(p, :D2).rot === nothing && entry(p, :D2).pos === nothing
+        @test BMO.position(p[:D2]) == [0.0, 0.0, 0.0]
         @test entry(p, :D2).label == "Camera"
 
         id = P.add!(dir, "Beam([0.0, 0.0, 0.0], [1.0, 0.0, 0.0], 6.33e-7)"; pos = (0.0, 0.0, 0.01),
@@ -109,6 +110,14 @@ end
         # a given id that is free
         @test P.add!(dir, "Detector(0.01)"; id = :Cam) === :Cam
         @test has(load_project(dir), :Cam)
+        # a source whose code has a start of its own starts there without `pos` (#11), and at `pos`
+        # with it
+        id = P.add!(dir, "GaussianBeamlet([0.0, -0.1, 0.0], [0.0, 1.0, 0.0], 1e-6, 1e-3)")
+        p = load_project(dir)
+        @test entry(p, id).pos === nothing && BMO.position(p[id]) ≈ [0.0, -0.1, 0.0]
+        @test !occursin("pos =", only(filter(l -> startswith(l, "@source $id ="), split(String(text(dir)), '\n'))))
+        id = P.add!(dir, "GaussianBeamlet([0.0, -0.1, 0.0], [0.0, 1.0, 0.0], 1e-6, 1e-3)"; pos = (0.0, 0.2, 0.0))
+        @test BMO.position(load_project(dir)[id]) ≈ [0.0, 0.2, 0.0]
     end
 
     @testset "a taken id, a source in two systems" begin

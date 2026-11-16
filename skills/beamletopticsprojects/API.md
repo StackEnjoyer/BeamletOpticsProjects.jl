@@ -29,7 +29,7 @@ but not exported are qualified: `BeamletOpticsProjects.install_agent_skill()`.
 | Own types | `constructor_code` |
 | Versions of the packages | `project_versions`, `check_versions`, `VersionCheck` |
 | Trace and read | `trace`, `look` |
-| Versions and changes | `save_version`, `versions`, `version_summary`, `diff_projects`, `EntryChange`, `SystemChange`, `GroupChange`, `copy_code` |
+| Versions and changes | `save_version`, `versions`, `version_summary`, `changes`, `changes_file`, `diff_projects`, `EntryChange`, `SystemChange`, `GroupChange`, `copy_code` |
 | Participants and claims | `announce`, `leave`, `claim!`, `release!`, `claims` |
 | Teams | `fork_team`, `teams`, `post!`, `board`, `wait_for`, `merge_draft!` |
 | Guards | `evaluate` |

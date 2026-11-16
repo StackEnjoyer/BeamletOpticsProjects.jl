@@ -206,7 +206,9 @@ Several people may have the project open in their own windows while you work on 
 - Each window writes `.bmo/session-<person>.md`: the selection and the recent actions of its person.
   If Claude Code was started in the project folder, its hook (`.claude/settings.json`) shows them
   with every prompt; otherwise read `.bmo/session*.md` when a person refers to "this" or "what I just
-  did". "Selected:" lists every object of a selection of several ("my selection"); the presence
+  did". The session file shows only the last 20 changes; `BeamletOpticsProjects.changes(".")` gives all of the
+  session with old and new poses and the version of each (`by`, `since` filter), e.g. to put a person's layout
+  back; use it instead of reading the Markdown for history. "Selected:" lists every object of a selection of several ("my selection"); the presence
   file has them in `selected_ids`. A session file of a window that was not closed properly stays:
   `look(p)` marks its participant "likely gone" when the presence file is older than its `ttl`,
   and the actions carry their date. The other files in `.bmo/` (`presence-*.toml`, `view-*.toml`, `claims/`) belong to their

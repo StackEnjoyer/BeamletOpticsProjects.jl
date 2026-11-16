@@ -11,17 +11,36 @@ One line per entry; components first, then sources, then groups, then systems:
 
 - The name after `@component`/`@source`/`@group`/`@system` is the readable **id** (`L1`, `M2`, `D3`,
   `BS1`, `B1`, `G1`, `S1`: a prefix of the family and a number, see `id_prefix`). It is unique and stays; never
-  rename an id. Give a new line the next free number of its prefix (`next_id(p, "L")`).
+  rename an id. Give a new line the next free number of its prefix (`next_id(p, "L")`). The prefix
+  comes from the type that the code builds, and the number counts over the whole project, so
+  `add!` may give `M3` where you expected `M1`: use the id that it returns.
+
+  | Built object | Prefix |
+  |---|---|
+  | `Lens`, `DoubletLens`, `TripletLens` | `L` |
+  | prisms | `P` |
+  | mirrors and other reflective optics | `M` |
+  | detectors | `D` |
+  | beamsplitters | `BS` |
+  | sources (beams and beam groups) | `B` |
+  | groups | `G` |
+  | systems | `S` |
+  | anything else | `X` |
+
+  A package with own component types may add prefixes (methods of `id_prefix`).
 - `label = "…"` is the name that people see and change in the GUI; optional. When a person names an
-  object ("the collimator"), find its id by the label (`look(p)` shows the labels).
+  object ("the collimator"), find its id by the label (`look(p)` shows the labels). Name it by what
+  the object does, not by an id: a label "BS1 split" contradicts the window when the id became
+  `BS2`.
 - `uid = "…"` (always last) is the machine id by which the GUI recognizes the line. Never change or
   copy it; a new line has no `uid`, it gets one when the project is saved.
 - The right-hand side is any expression that builds a BeamletOptics component, group or source, also
   a call of a function of `src/<Name>.jl` (its exported names). SI units: m, wavelengths in m.
   For an own type with a method of `constructor_code`, the window writes this expression anew
   from that method when a person changes the shape on its card (see "Own code" in `SKILL.md`).
-- `pos` is the absolute position (m), `rot` the rotation since construction in degrees: first about
-  the global x-axis, then y, then z. Both are optional.
+- `pos` is the absolute position (m), `rot` the rotation since construction in **degrees** (unlike
+  BeamletOptics, whose rotations take radians): first about the global x-axis, then y, then z. Both
+  are optional.
 - `catalog = (...)` belongs to the GUI (its page "Edit"); delete it when you change the constructor.
 - `@system`: members are components; a component may be in several systems, a source in at most one.
   `static = true` makes a `StaticSystem`. Each system is traced on its own (`trace(p, :S1)`); a detector that is in several systems is the exception in the window, which adds up their hits.

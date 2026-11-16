@@ -20,10 +20,13 @@ When this Skill is active:
   `Pkg.activate(".")`).
   - **Check before you change the project:** `check_versions(".")` compares the versions that the
     project file records with those of the environment (`look(p)` shows them too). Tell the person
-    about `:older` (`Pkg.update("X")`) and `:missing` (`Pkg.add("X")`).
-  - **No environment yet:** if `@bmo-agent` does not exist, ask the person whether to create it
-    (`julia --project=@bmo-agent -e 'using Pkg; Pkg.add(["BeamletOptics", "BeamletOpticsProjects"])'`,
-    plus the packages under `[packages]`) or which environment to use instead. Never guess a path.
+    about `:older` (`Pkg.update("X")`) and `:missing` (`Pkg.add("X")`, for BeamletOpticsProjects
+    the line below).
+  - **No environment yet:** if `@bmo-agent` does not exist, ask the person whether to create it or
+    which environment to use instead. Never guess a path. BeamletOpticsProjects is not in the
+    General registry yet, so both packages come from their repositories (plus the packages under
+    `[packages]`):
+    `julia --project=@bmo-agent -e 'using Pkg; Pkg.add([PackageSpec(url = "https://github.com/StackEnjoyer/BeamletOptics.jl", rev = "master"), PackageSpec(url = "https://github.com/StackEnjoyer/BeamletOpticsProjects.jl", rev = "main")])'`
   - **Change an environment only after the person agreed:** adding or updating packages compiles
     them again and changes everything else that uses the environment; say so when you ask.
 - **The optics comes from the `beamletoptics` skill** (units, +y optical axis, constructors,
@@ -91,7 +94,8 @@ Bench/
    - `id = add!(".", "RoundPlanoMirror(0.0254, 0.006)"; pos = (0.1, 0.2, 0), rot = (0, 0, 45),
      label = "fold", systems = [:S1], by = "claude")`: picks the next free id of its prefix in the
      same write (no other participant can take it meanwhile) and returns it; a source goes into
-     the `sources` of one system.
+     the `sources` of one system. `pos` is in m, `rot` in degrees (not radians as in
+     BeamletOptics); the prefixes of the ids are listed in `FORMAT.md`.
    - `set!(".", :L9; pos, rot, code, label, by)` changes only the given fields of a line (a group:
      its label; move groups with `move!`).
    - `move!(".", [:G1, :FIOS1]; offset = (0.3, 0, 0), rot = (0, 0, 10), pivot = :center, by)` moves
@@ -212,7 +216,9 @@ The windows show every participant at the object it works on, people and agents 
 - `announce(".", name = "claude", doing = "aligning L2", selected_id = "L2")` writes your presence
   file `.bmo/presence-<name>@agent.toml` (see the docstring of `announce` for its fields). `name` is
   your id and must be unique among the participants (`"claude-w1"` for a worker of a team): the same
-  `name` is the same file. Call it again when you go to another object. After you wrote the files,
+  `name` is the same file. `selected_id` places your `doing` at that object in the windows;
+  without it, the windows show it in a corner of the view. Call it again when you go to another
+  object. After you wrote the files,
   call it with `wrote = true`: only then it publishes the stamp of the files (`written`), by which
   the windows name you as the writer of a change, also if they merged the change before your call;
   without `wrote = true` the `written` of the file before is kept.

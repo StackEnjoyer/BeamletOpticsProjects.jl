@@ -25,6 +25,17 @@ every participant: people and agents, with a window or without. BeamletOpticsGUI
 top of it. An agent needs no GUI: it works with BeamletOptics and BeamletOpticsProjects only. Each
 package ships its own agent skill (`install_agent_skill()`).
 
+## Installation
+
+BeamletOpticsProjects is not in the General registry yet. Install it, and BeamletOptics in the
+version it is developed against, from their repositories:
+
+```julia
+using Pkg
+Pkg.add([PackageSpec(url = "https://github.com/StackEnjoyer/BeamletOptics.jl", rev = "master"),
+    PackageSpec(url = "https://github.com/StackEnjoyer/BeamletOpticsProjects.jl", rev = "main")])
+```
+
 ## A project
 
 ```text
